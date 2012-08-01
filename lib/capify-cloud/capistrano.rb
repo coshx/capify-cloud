@@ -7,10 +7,16 @@ Capistrano::Configuration.instance(:must_exist).load do
   end
 
   namespace :cloud do
-    
+
     desc "Prints out all cloud instances. index, name, instance_id, size, DNS/IP, region, tags"
     task :status do
       capify_cloud.display_instances
+    end
+
+    desc "Creates ami based on role"
+    task :create_ami do
+      instance_name = variables[:logger].instance_variable_get("@options")[:actions].first
+      capify_cloud.create_ami(instance_name)
     end
 
     desc "Deregisters instance from its ELB"

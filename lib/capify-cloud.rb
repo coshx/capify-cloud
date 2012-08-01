@@ -3,7 +3,6 @@ require 'fog'
 require 'colored'
 require File.expand_path(File.dirname(__FILE__) + '/capify-cloud/server')
 
-
 class CapifyCloud
 
   attr_accessor :load_balancer, :instances
@@ -20,8 +19,7 @@ class CapifyCloud
     end
 
     @cloud_providers = @cloud_config[:cloud_providers]
-    
-    @instances = []
+   @instances = []
     @cloud_providers.each do |cloud_provider|
       config = @cloud_config[cloud_provider.to_sym]
       case cloud_provider
@@ -34,7 +32,7 @@ class CapifyCloud
       else
         regions = determine_regions(cloud_provider)
         regions.each do |region|
-          servers = Fog::Compute.new(:provider => cloud_provider, :aws_access_key_id => config[:aws_access_key_id], 
+          servers = Fog::Compute.new(:provider => cloud_provider, :aws_access_key_id => config[:aws_access_key_id],
             :aws_secret_access_key => config[:aws_secret_access_key], :region => region).servers
           servers.each do |server|
             @instances << server if server.ready?
@@ -42,8 +40,37 @@ class CapifyCloud
         end
       end
     end
-  end 
-  
+  end
+  def create_ami(role)
+    @cloud_providers.each do |cloud_provider|
+      case cloud_provider
+         when 'AWS'
+           config = @cloud_config[:AWS]
+           compute = Fog::Compute.new(:provider => :AWS, :aws_access_key_id => config[:aws_access_key_id],
+                                      :aws_secret_access_key => config[:aws_secret_access_key], :region => config[:params][:region])
+           instances = get_instances_by_role(role)
+           instances.each do |instance|
+           ami = compute.create_image(instance.id,"#{role}-#{DateTime.now.strftime.gsub(':','.')}", DateTime.now.strftime.gsub(':','.'))
+             progress_output = "."
+             Fog.wait_for do
+               STDOUT.write "\r#{progress_output}"
+               progress_output = progress_output+"."
+               (@ami_status = compute.describe_images('image-id' => ami.body['imageId']).body['imagesSet'].first['imageState']) != 'pending'
+             end
+             if @ami_status == 'available'
+               tags = {'Roles' => instance.tags['Roles'], }
+               compute.create_tags(ami.body['imageId'], tags)
+               puts "\nnew #{ami.body['imageId']} created from #{instance.id} and tagged with with #{tags}."
+               return ami
+             else puts '\nami create '+@ami_status end
+           end
+        else
+          puts "ERROR: cloud:create_ami supports AWS only."
+        end
+      end
+    return nil
+  end
+
   def determine_regions(cloud_provider = 'AWS')
     @cloud_config[cloud_provider.to_sym][:params][:regions] || [@cloud_config[cloud_provider.to_sym][:params][:region]]
   end
