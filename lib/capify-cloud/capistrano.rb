@@ -2,21 +2,53 @@ require File.join(File.dirname(__FILE__), '../capify-cloud')
 require 'colored'
 
 Capistrano::Configuration.instance(:must_exist).load do  
+
   def capify_cloud
     @capify_cloud ||= CapifyCloud.new(fetch(:cloud_config, 'config/cloud.yml'))
   end
+
+  def autoscale_role
+    @autoscale_role ||= ARGV[0].to_s
+  end
+
+  namespace :ami do
+
+    desc "Creates ami based on role"
+    task :create do
+      capify_cloud.create_ami(autoscale_role)
+    end
+
+    desc "Keeps limited number of ami"
+    task :cleanup do
+     #
+    end
+  end
+  after "ami", "ami:cleanup"
+
+  namespace :autoscale do
+
+    desc "Creates a new launch configuration"
+    task :create do
+      capify_cloud.autoscale_create(autoscale_role)
+    end
+
+    desc "Creates a new launch configuration"
+    task :update do
+      capify_cloud.autoscale_update(autoscale_role)
+    end
+
+    desc "Keeps limited number of prior launch configurations (in keeping with the number of ami)"
+    task :cleanup do
+      #
+    end
+  end
+  after "autoscale", "autoscale:cleanup"
 
   namespace :cloud do
 
     desc "Prints out all cloud instances. index, name, instance_id, size, DNS/IP, region, tags"
     task :status do
       capify_cloud.display_instances
-    end
-
-    desc "Creates ami based on role"
-    task :create_ami do
-      instance_name = variables[:logger].instance_variable_get("@options")[:actions].first
-      capify_cloud.create_ami(instance_name)
     end
 
     desc "Deregisters instance from its ELB"

@@ -18,6 +18,7 @@ describe "Cap" do
    compute.create_tags(instance, {"Roles"=> "web, app, worker"})
    compute.create_tags(instance, {"Project"=> "example_project"})
    Cap = CapifyCloud.new(File.dirname(File.expand_path(__FILE__)) + '/support/cloud.yml')
+  # -> can send a hash containing key and stuff rather than cloud.yml
 end
 
   describe "cloud:create_ami" do
