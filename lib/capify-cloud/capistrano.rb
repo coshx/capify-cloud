@@ -13,12 +13,19 @@ Capistrano::Configuration.instance(:must_exist).load do
 
   namespace :ami do
 
+    desc "Prints latest ami based on role"
+     task :latest do
+       ami_id = capify_cloud.find_latest_ami(autoscale_role)
+       ami_tags = capify_cloud.image_tags(ami_id)
+       puts ami_id+" "+ami_tags.to_s
+     end
+
     desc "Creates ami based on role"
     task :create do
       capify_cloud.create_ami(autoscale_role)
     end
 
-    desc "Keeps limited number of ami"
+    desc "Keeps limited number of ami on AWS"
     task :cleanup do
      #
     end

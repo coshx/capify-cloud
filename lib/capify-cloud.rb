@@ -50,17 +50,36 @@ class CapifyCloud
     @autoscale ||=Fog::AWS::AutoScaling.new(:aws_access_key_id => config[:aws_access_key_id],:aws_secret_access_key => config[:aws_secret_access_key])
   end
 
+  def find_latest_ami(_role)
+      images = Array.new
+      ami = describe_project_ami
+      ami.body['imagesSet'].each do |image| images.push(image) end
+      images = images.sort{|image1,image2| Time.parse(image1["tagSet"]["Version"]).to_i <=> Time.parse(image2["tagSet"]["Version"]).to_i}
+      images[0]["imageId"]
+  end
+
   def latest_ami(_role)
     @latest_ami ||= find_latest_ami(_role)
   end
 
-  def find_latest_ami(_role)
-    images = Array.new
-    ami = describe_project_ami
-    ami.body['imagesSet'].each do |image| images.push(image) end
-    images.sort{|image1,image2| image1["tagSet"]["Version"] <=> image2["tagSet"]["Version"]}
-    return images[0]["imageId"] ;
+  def image_state(ami)
+    compute.describe_images('image-id' => ami.body['imageId']).body['imagesSet'].first['imageState']
   end
+
+  def image_tags(ami_id)
+    compute.describe_images('image-id' => ami_id).body['imagesSet'].first["tagSet"]
+  end
+
+  def create_ami_image(instance, _role)
+      ami = compute.create_image(instance.id,"#{_role}-#{Time.now.utc.iso8601.gsub(':','.')}", "#{_role}-#{Time.now.utc.iso8601.gsub(':','.')}")
+      progress_output = "."
+      Fog.wait_for do
+        STDOUT.write "\r#{progress_output}"
+        progress_output = progress_output+"."
+        image_state(ami) != 'pending'
+      end
+      ami
+    end
 
   def create_ami(_role)
     unless @cloud_providers.include?('AWS')
@@ -69,9 +88,10 @@ class CapifyCloud
     end
     instances = get_instances_by_role(_role)
     instances.each do |instance|
-        if create_ami_image(instance,_role)
+        ami = create_ami_image(instance,_role)
+        if image_state(ami) == 'available'
           compute.create_tags(ami.body['imageId'], instance.tags)
-          puts "\nnew #{ami.body['imageId']} created from #{instance.id} and tagged with with #{instance.tags}."
+          puts "\n#{ami.body['imageId']} created from #{instance.id} #{instance.tags}"
           return ami
         else
           puts '\nami create failed'
@@ -171,42 +191,30 @@ class CapifyCloud
     return compute.describe_images('tag:Project' => @cloud_config[:project_tag])
   end
 
-  def create_ami_image(instance, role)
-    ami = compute.create_image(instance.id,"#{role}-#{DateTime.now.strftime.gsub(':','.')}", DateTime.now.strftime.gsub(':','.'))
-    puts ami.body
-    progress_output = "."
-      Fog.wait_for do
-        STDOUT.write "\r#{progress_output}"
-        progress_output = progress_output+"."
-        (@ami_status = compute.describe_images('image-id' => ami.body['imageId']).body['imagesSet'].first['imageState']) != 'pending'
-    end
-    @ami_status == 'available'
+  def project_instances
+    @instances.select {|instance| instance.tags["Project"] == @cloud_config[:project_tag]}
   end
 
-  def project_instances
-      @instances.select {|instance| instance.tags["Project"] == @cloud_config[:project_tag]}
-    end
-
   def desired_instances
-      @cloud_config[:project_tag].nil? ? @instances : project_instances
-    end
+    @cloud_config[:project_tag].nil? ? @instances : project_instances
+  end
 
   def get_instances_by_role(role)
-      desired_instances.select {|instance| instance.tags['Roles'].split(%r{,\s*}).include?(role.to_s) rescue false}
-    end
+    desired_instances.select {|instance| instance.tags['Roles'].split(%r{,\s*}).include?(role.to_s) rescue false}
+  end
 
   def get_instances_by_region(roles, region)
-      return unless region
-      desired_instances.select {|instance| instance.availability_zone.match(region) && instance.roles == roles.to_s rescue false}
-    end
+    return unless region
+    desired_instances.select {|instance| instance.availability_zone.match(region) && instance.roles == roles.to_s rescue false}
+  end
 
   def get_instance_by_name(name)
-      desired_instances.select {|instance| instance.name == name}.first
-    end
+    desired_instances.select {|instance| instance.name == name}.first
+  end
 
   def determine_regions(cloud_provider = 'AWS')
-      @cloud_config[cloud_provider.to_sym][:params][:regions] || [@cloud_config[cloud_provider.to_sym][:params][:region]]
-    end
+    @cloud_config[cloud_provider.to_sym][:params][:regions] || [@cloud_config[cloud_provider.to_sym][:params][:region]]
+  end
 
 end
 
