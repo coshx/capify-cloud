@@ -50,16 +50,20 @@ class CapifyCloud
     @autoscale ||=Fog::AWS::AutoScaling.new(:aws_access_key_id => config[:aws_access_key_id],:aws_secret_access_key => config[:aws_secret_access_key])
   end
 
-  def find_latest_ami(_role)
+  def find_latest_ami(role)
       images = Array.new
-      ami = describe_project_ami
-      ami.body['imagesSet'].each do |image| images.push(image) end
+      amis = describe_ami
+      amis.body['imagesSet'].each do |image|
+        unless image["tagSet"].empty?
+          images.push(image) if image["tagSet"]["Roles"].include? role
+        end
+      end
       images = images.sort{|image1,image2| Time.parse(image1["tagSet"]["Version"]).to_i <=> Time.parse(image2["tagSet"]["Version"]).to_i}
       images[0]["imageId"]
   end
 
-  def latest_ami(_role)
-    @latest_ami ||= find_latest_ami(_role)
+  def latest_ami(role)
+    @latest_ami ||= find_latest_ami(role)
   end
 
   def image_state(ami)
@@ -70,8 +74,8 @@ class CapifyCloud
     compute.describe_images('image-id' => ami_id).body['imagesSet'].first["tagSet"]
   end
 
-  def create_ami_image(instance, _role)
-      ami = compute.create_image(instance.id,"#{_role}-#{Time.now.utc.iso8601.gsub(':','.')}", "#{_role}-#{Time.now.utc.iso8601.gsub(':','.')}")
+  def create_ami_image(instance, role)
+      ami = compute.create_image(instance.id,"#{role}-#{Time.now.utc.iso8601.gsub(':','.')}", "#{role}-#{Time.now.utc.iso8601.gsub(':','.')}")
       progress_output = "."
       Fog.wait_for do
         STDOUT.write "\r#{progress_output}"
@@ -81,35 +85,39 @@ class CapifyCloud
       ami
     end
 
-  def create_ami(_role)
+  def create_ami(role)
     unless @cloud_providers.include?('AWS')
       puts "cloud:create_ami supports AWS only."
       return
     end
-    instances = get_instances_by_role(_role)
+    instances = get_instances_by_role(role)
     instances.each do |instance|
-        ami = create_ami_image(instance,_role)
+        ami = create_ami_image(instance,role)
         if image_state(ami) == 'available'
           compute.create_tags(ami.body['imageId'], instance.tags)
           puts "\n#{ami.body['imageId']} created from #{instance.id} #{instance.tags}"
           return ami
         else
-          puts '\nami create failed'
+          puts "\nami create failed"
           return nil
         end
     end
   end
 
-  def autoscale_create(_role)
-    begin auto_scale.create_launch_configuration(latest_ami(_role),'t1.micro', _role+'_launch_configuration_'+latest_ami(_role))                             ; rescue StandardError => e ;  puts e ; end
-    begin auto_scale.create_auto_scaling_group(_role+'_group', 'us-east-1a', _role+'_launch_configuration_'+latest_ami(_role), max = 500, min = 2, {}) ; rescue StandardError => e ;  puts e ; end
-    begin auto_scale.put_scaling_policy('ChangeInCapacity', _role+'_group', 'ScaleUp', scaling_adjustment = 1, {})                     ; rescue StandardError => e ;  puts e ; end
-    begin auto_scale.put_scaling_policy('ChangeInCapacity', _role+'_group', 'ScaleDown', scaling_adjustment = -1, {})                  ; rescue StandardError => e ;  puts e ; end
+  def describe_ami
+    return compute.describe_images('tag:Project' => @cloud_config[:project_tag])
   end
 
-  def autoscale_update(_role)
-    begin auto_scale.create_launch_configuration(latest_ami(_role),'t1.micro', _role+'_launch_configuration_'+latest_ami(_role))                      ; rescue StandardError => e ;  puts e ; end
-    begin auto_scale.update_auto_scaling_group(_role+'_group', "LaunchConfigurationName" => _role+'_launch_configuration_'+latest_ami(_role) )  ; rescue StandardError => e ;  puts e ; end
+  def autoscale_create(role)
+    begin auto_scale.create_launch_configuration(latest_ami(role),'t1.micro', role+'_launch_configuration_'+latest_ami(role))                             ; rescue StandardError => e ;  puts e ; end
+    begin auto_scale.create_auto_scaling_group(role+'_group', 'us-east-1a', role+'_launch_configuration_'+latest_ami(role), max = 500, min = 2, {}) ; rescue StandardError => e ;  puts e ; end
+    begin auto_scale.put_scaling_policy('ChangeInCapacity', role+'_group', 'ScaleUp', scaling_adjustment = 1, {})                     ; rescue StandardError => e ;  puts e ; end
+    begin auto_scale.put_scaling_policy('ChangeInCapacity', role+'_group', 'ScaleDown', scaling_adjustment = -1, {})                  ; rescue StandardError => e ;  puts e ; end
+  end
+
+  def autoscale_update(role)
+    begin auto_scale.create_launch_configuration(latest_ami(role),'t1.micro', role+'_launch_configuration_'+latest_ami(role))                      ; rescue StandardError => e ;  puts e ; end
+    begin auto_scale.update_auto_scaling_group(_role+'_group', "LaunchConfigurationName" => _role+'_launch_configuration_'+latest_ami(role) )  ; rescue StandardError => e ;  puts e ; end
   end
 
   def display_instances
@@ -185,10 +193,6 @@ class CapifyCloud
 
   def elb
       Fog::AWS::ELB.new(:aws_access_key_id => @cloud_config[:aws_access_key_id], :aws_secret_access_key => @cloud_config[:aws_secret_access_key], :region => @cloud_config[:aws_params][:region])
-  end
-
-  def describe_project_ami
-    return compute.describe_images('tag:Project' => @cloud_config[:project_tag])
   end
 
   def project_instances
