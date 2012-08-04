@@ -57,7 +57,7 @@ class CapifyCloud
           images.push(image) if image["tagSet"]["Roles"].include? role
         end
       end
-      images = images.sort{|image1,image2| Time.parse(image1["tagSet"]["Version"]).to_i <=> Time.parse(image2["tagSet"]["Version"]).to_i}
+      images = images.sort{|image1,image2| Time.parse(image2["tagSet"]["Version"]).to_i <=> Time.parse(image1["tagSet"]["Version"]).to_i}
       images[0]["imageId"]
   end
 
@@ -94,7 +94,11 @@ class CapifyCloud
         ami = create_ami_image(instance,role)
         if image_state(ami) == 'available'
           compute.create_tags(ami.body['imageId'], instance.tags)
-          puts "\n#{ami.body['imageId']} created from #{instance.id} #{instance.tags}"
+          if image_tags(ami.body['imageId']).empty?
+            puts "\nami created, but there was an error adding it's tags - please try creating a new ami in a few minutes"
+          else
+            puts "\n#{ami.body['imageId']} created from #{instance.id} #{image_tags(ami.body['imageId'])}"
+          end
           return ami
         else
           puts "\nami create failed"
@@ -119,7 +123,7 @@ class CapifyCloud
   def autoscale_update(role)
     instance_type = @cloud_config[:AWS][:params][:instance_type]
     begin auto_scale.create_launch_configuration(latest_ami(role),instance_type, role+'_launch_configuration_'+latest_ami(role))                      ; rescue StandardError => e ;  puts e ; end
-    begin auto_scale.update_auto_scaling_group(_role+'_group', "LaunchConfigurationName" => _role+'_launch_configuration_'+latest_ami(role) )  ; rescue StandardError => e ;  puts e ; end
+    begin auto_scale.update_auto_scaling_group(role+'_group', "LaunchConfigurationName" => role+'_launch_configuration_'+latest_ami(role) )  ; rescue StandardError => e ;  puts e ; end
   end
 
   def display_instances
