@@ -52,8 +52,7 @@ class CapifyCloud
 
   def find_latest_ami(role)
       images = Array.new
-      amis = describe_ami
-      amis.body['imagesSet'].each do |image|
+      project_ami.body['imagesSet'].each do |image|
         unless image["tagSet"].empty?
           images.push(image) if image["tagSet"]["Roles"].include? role
         end
@@ -104,19 +103,22 @@ class CapifyCloud
     end
   end
 
-  def describe_ami
-    return compute.describe_images('tag:Project' => @cloud_config[:project_tag])
+  def project_ami
+    compute.describe_images('tag:Project' => @cloud_config[:project_tag])
   end
 
   def autoscale_create(role)
-    begin auto_scale.create_launch_configuration(latest_ami(role),'t1.micro', role+'_launch_configuration_'+latest_ami(role))                             ; rescue StandardError => e ;  puts e ; end
-    begin auto_scale.create_auto_scaling_group(role+'_group', 'us-east-1a', role+'_launch_configuration_'+latest_ami(role), max = 500, min = 2, {}) ; rescue StandardError => e ;  puts e ; end
+    region = @cloud_config[:AWS][:params][:region]
+    instance_type = @cloud_config[:AWS][:params][:instance_type]
+    begin auto_scale.create_launch_configuration(latest_ami(role),instance_type, role+'_launch_configuration_'+latest_ami(role))                             ; rescue StandardError => e ;  puts e ; end
+    begin auto_scale.create_auto_scaling_group(role+'_group', region, role+'_launch_configuration_'+latest_ami(role), max = 500, min = 2, {}) ; rescue StandardError => e ;  puts e ; end
     begin auto_scale.put_scaling_policy('ChangeInCapacity', role+'_group', 'ScaleUp', scaling_adjustment = 1, {})                     ; rescue StandardError => e ;  puts e ; end
     begin auto_scale.put_scaling_policy('ChangeInCapacity', role+'_group', 'ScaleDown', scaling_adjustment = -1, {})                  ; rescue StandardError => e ;  puts e ; end
   end
 
   def autoscale_update(role)
-    begin auto_scale.create_launch_configuration(latest_ami(role),'t1.micro', role+'_launch_configuration_'+latest_ami(role))                      ; rescue StandardError => e ;  puts e ; end
+    instance_type = @cloud_config[:AWS][:params][:instance_type]
+    begin auto_scale.create_launch_configuration(latest_ami(role),instance_type, role+'_launch_configuration_'+latest_ami(role))                      ; rescue StandardError => e ;  puts e ; end
     begin auto_scale.update_auto_scaling_group(_role+'_group', "LaunchConfigurationName" => _role+'_launch_configuration_'+latest_ami(role) )  ; rescue StandardError => e ;  puts e ; end
   end
 
