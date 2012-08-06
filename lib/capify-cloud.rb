@@ -50,6 +50,73 @@ class CapifyCloud
     @autoscale ||=Fog::AWS::AutoScaling.new(:aws_access_key_id => config[:aws_access_key_id],:aws_secret_access_key => config[:aws_secret_access_key])
   end
 
+  def elb
+    config = @cloud_config[:AWS]
+    @elb ||= Fog::AWS::ELB.new(:aws_access_key_id => config[:aws_access_key_id], :aws_secret_access_key => config[:aws_secret_access_key], :region => config[:params][:region])
+  end
+
+  def get_load_balancers
+    elb.load_balancers.all
+  end
+
+  def get_load_balancer_by_instance(instance_id)
+    hash = elb.load_balancers.inject({}) do |collect, load_balancer|
+      load_balancer.instances.each {|load_balancer_instance_id| collect[load_balancer_instance_id] = load_balancer}
+      collect
+    end
+    hash[instance_id]
+  end
+
+  def get_load_balancer_by_name(load_balancer_name)
+    lbs = {}
+    elb.load_balancers.each do |load_balancer|
+      lbs[load_balancer.id] = load_balancer
+    end
+      lbs[load_balancer_name]
+  end
+
+  def instance_health(load_balancer, instance)
+    elb.describe_instance_health(load_balancer.id, instance.id).body['DescribeInstanceHealthResult']['InstanceStates'][0]['State']
+  end
+
+  def deregister_instance_from_elb(instance_name)
+    return unless @cloud_config[:load_balanced]
+    instance = get_instance_by_name(instance_name)
+    return if instance.nil?
+    @@load_balancer = get_load_balancer_by_instance(instance.id)
+    return if @@load_balancer.nil?
+
+    elb.deregister_instances_from_load_balancer(instance.id, @@load_balancer.id)
+  end
+
+  def register_instance_in_elb(instance_name, load_balancer_name = '')
+    return if !@cloud_config[:load_balanced]
+    instance = get_instance_by_name(instance_name)
+    return if instance.nil?
+    load_balancer =  get_load_balancer_by_name(load_balancer_name) || @@load_balancer
+    return if load_balancer.nil?
+
+    elb.register_instances_with_load_balancer(instance.id, load_balancer.id)
+
+    fail_after = @cloud_config[:fail_after] || 30
+    state = instance_health(load_balancer, instance)
+    time_elapsed = 0
+
+    while time_elapsed < fail_after
+      break if state == "InService"
+      sleep SLEEP_COUNT
+      time_elapsed += SLEEP_COUNT
+      STDERR.puts 'Verifying Instance Health'
+      state = instance_health(load_balancer, instance)
+    end
+    if state == 'InService'
+      STDERR.puts "#{instance.name}: Healthy"
+    else
+      STDERR.puts "#{instance.name}: tests timed out after #{time_elapsed} seconds."
+    end
+  end
+
+
   def find_latest_ami(role)
       images = Array.new
       project_ami.body['imagesSet'].each do |image|
@@ -137,68 +204,6 @@ class CapifyCloud
 
   def server_names
     desired_instances.map {|instance| instance.name}
-  end
-
-  def instance_health(load_balancer, instance)
-    elb.describe_instance_health(load_balancer.id, instance.id).body['DescribeInstanceHealthResult']['InstanceStates'][0]['State']
-  end
-
-  def get_load_balancer_by_instance(instance_id)
-    hash = elb.load_balancers.inject({}) do |collect, load_balancer|
-      load_balancer.instances.each {|load_balancer_instance_id| collect[load_balancer_instance_id] = load_balancer}
-      collect
-    end
-    hash[instance_id]
-  end
-  
-  def get_load_balancer_by_name(load_balancer_name)
-    lbs = {}
-    elb.load_balancers.each do |load_balancer|
-      lbs[load_balancer.id] = load_balancer
-    end
-    lbs[load_balancer_name]
-
-  end
-     
-  def deregister_instance_from_elb(instance_name)
-    return unless @cloud_config[:load_balanced]
-    instance = get_instance_by_name(instance_name)
-    return if instance.nil?
-    @@load_balancer = get_load_balancer_by_instance(instance.id)
-    return if @@load_balancer.nil?
-
-    elb.deregister_instances_from_load_balancer(instance.id, @@load_balancer.id)
-  end
-  
-  def register_instance_in_elb(instance_name, load_balancer_name = '')
-    return if !@cloud_config[:load_balanced]
-    instance = get_instance_by_name(instance_name)
-    return if instance.nil?
-    load_balancer =  get_load_balancer_by_name(load_balancer_name) || @@load_balancer
-    return if load_balancer.nil?
-
-    elb.register_instances_with_load_balancer(instance.id, load_balancer.id)
-
-    fail_after = @cloud_config[:fail_after] || 30
-    state = instance_health(load_balancer, instance)
-    time_elapsed = 0
-    
-    while time_elapsed < fail_after
-      break if state == "InService"
-      sleep SLEEP_COUNT
-      time_elapsed += SLEEP_COUNT
-      STDERR.puts 'Verifying Instance Health'
-      state = instance_health(load_balancer, instance)
-    end
-    if state == 'InService'
-      STDERR.puts "#{instance.name}: Healthy"
-    else
-      STDERR.puts "#{instance.name}: tests timed out after #{time_elapsed} seconds."
-    end
-  end
-
-  def elb
-      Fog::AWS::ELB.new(:aws_access_key_id => @cloud_config[:aws_access_key_id], :aws_secret_access_key => @cloud_config[:aws_secret_access_key], :region => @cloud_config[:aws_params][:region])
   end
 
   def project_instances

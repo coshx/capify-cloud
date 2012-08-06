@@ -11,6 +11,14 @@ Capistrano::Configuration.instance(:must_exist).load do
     @autoscale_role ||= ARGV[0].to_s
   end
 
+  namespace :elb do
+
+    task :display_it do
+        puts capify_cloud.get_load_balancers
+    end
+
+  end
+
   namespace :ami do
 
     desc "Prints latest ami based on role"
