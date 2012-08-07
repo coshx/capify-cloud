@@ -13,8 +13,19 @@ Capistrano::Configuration.instance(:must_exist).load do
 
   namespace :elb do
 
-    task :display_it do
-        puts capify_cloud.get_load_balancers
+    desc "Create new load balancer"
+    task :create do
+      puts capify_cloud.create_load_balancer.body['CreateLoadBalancerResult']
+    end
+
+    desc "Deletes load balancer"
+    task :delete do
+      capify_cloud.delete_load_balancer
+    end
+
+    desc "Prints information about load balancer"
+    task :info do
+      puts capify_cloud.describe_load_balancer.body['DescribeLoadBalancersResult']
     end
 
   end
@@ -42,14 +53,19 @@ Capistrano::Configuration.instance(:must_exist).load do
 
   namespace :autoscale do
 
-    desc "Creates a new launch configuration"
+    desc "Creates new autoscale configuration"
     task :create do
-      capify_cloud.autoscale_create(autoscale_role)
+      capify_cloud.create_autoscale(autoscale_role)
     end
 
     desc "Creates a new launch configuration"
     task :update do
-      capify_cloud.autoscale_update(autoscale_role)
+      capify_cloud.update_autoscale(autoscale_role)
+    end
+
+    desc "Removes autoscale configuration and instances"
+    task :delete do
+      capify_cloud.delete_autoscale(autoscale_role)
     end
 
     desc "Keeps limited number of prior launch configurations (in keeping with the number of ami)"
