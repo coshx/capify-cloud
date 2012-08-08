@@ -156,10 +156,11 @@ class CapifyCloud
   end
 
   def terminate_instance(instance)
-    compute.terminate_instances().body['instancesSet'].first
+    compute.terminate_instances(instance).body['instancesSet'].first
     Fog.wait_for do
       compute_state(instance) == 'terminated'
     end
+
   end
 
   def describe_cloudwatch_alarms(options = {})
@@ -198,54 +199,63 @@ class CapifyCloud
     elb.create_load_balancer(zone, load_balancer_name, listeners)
   end
 
+  def create_ami(role)
+      unless @cloud_providers.include?('AWS')
+        puts "cloud:create_ami supports AWS only."
+        return
+      end
+      instances = get_instances_by_role(role)
+      instances.each do |instance|
+          ami = create_ami_image(instance,role)
+          if image_state(ami) == 'available'
+            compute.create_tags(ami.body['imageId'], instance.tags)
+            if image_tags(ami.body['imageId']).empty?
+              puts "\nami created, but there was an error adding it's tags - please try creating a new ami in a few minutes"
+            else
+              puts "\n#{ami.body['imageId']} created from #{instance.id} #{image_tags(ami.body['imageId'])}"
+            end
+            return ami
+          else
+            puts "\nami create failed"
+            return nil
+          end
+      end
+  end
+
   def create_autoscale(role)
     instance_type = @cloud_config[:AWS][:params][:instance_type]
     zone = @cloud_config[:AWS][:params][:availability_zone]
-
-    begin auto_scale.create_launch_configuration(latest_ami_id(role),instance_type, launch_configuration_name(role))                     ; rescue StandardError => e ;  puts e ; end
-    begin auto_scale.create_auto_scaling_group(autoscale_group_name(role), zone, launch_configuration_name(role),
-                                               max = 500, min = 2, {'LoadBalancerNames'=>load_balancer_name})                         ; rescue StandardError => e ;  puts e ; end
+    ami = latest_ami_id(role)
+    autoscale_tags = Array.new
+    image_tags(ami).each_pair do |k,v|
+      if k == "Name"
+        autoscale_tags.push({'key'=>k,'value'=>auto+"_"+v, 'propagate_at_launch'=> 'true'})
+      else
+        autoscale_tags.push({'key'=>k,'value'=>v, 'propagate_at_launch'=> 'true'})
+      end
+    end
+    begin auto_scale.create_launch_configuration(ami,instance_type, launch_configuration_name(role))                                               ; rescue StandardError => e ;  puts e ; end
+    begin auto_scale.create_auto_scaling_group(autoscale_group_name(role), zone, launch_configuration_name(role),max = 500, min = 2, {'LoadBalancerNames'=>load_balancer_name,'DefaultCooldown'=>0, 'Tags' => autoscale_tags })   ; rescue StandardError => e ;  puts e ; end
     begin auto_scale.put_scaling_policy('ChangeInCapacity', autoscale_group_name(role), 'ScaleUp', scaling_adjustment = 1, {})                     ; rescue StandardError => e ;  puts e ; end
     begin auto_scale.put_scaling_policy('ChangeInCapacity', autoscale_group_name(role), 'ScaleDown', scaling_adjustment = -1, {})                  ; rescue StandardError => e ;  puts e ; end
-  end
-
-  def create_ami(role)
-    unless @cloud_providers.include?('AWS')
-      puts "cloud:create_ami supports AWS only."
-      return
-    end
-    instances = get_instances_by_role(role)
-    instances.each do |instance|
-        ami = create_ami_image(instance,role)
-        if image_state(ami) == 'available'
-          compute.create_tags(ami.body['imageId'], instance.tags)
-          if image_tags(ami.body['imageId']).empty?
-            puts "\nami created, but there was an error adding it's tags - please try creating a new ami in a few minutes"
-          else
-            puts "\n#{ami.body['imageId']} created from #{instance.id} #{image_tags(ami.body['imageId'])}"
-          end
-          return ami
-        else
-          puts "\nami create failed"
-          return nil
-        end
-    end
   end
 
   def update_autoscale(role)
     instance_type = @cloud_config[:AWS][:params][:instance_type]
     begin auto_scale.create_launch_configuration(latest_ami_id(role), instance_type, launch_configuration_name(role))                                        ; rescue StandardError => e ;  puts e ; end
-    begin auto_scale.update_auto_scaling_group(autoscale_group_name(role),{"LaunchConfigurationName" => launch_configuration_name(role),'MaxSize'=>500,'MinSize'=>2})  ; rescue StandardError => e ;  puts e ; end
+    begin auto_scale.update_auto_scaling_group(autoscale_group_name(role),{"LaunchConfigurationName" => launch_configuration_name(role),'MaxSize'=>500,'MinSize'=>2, 'DefaultCooldown'=>0})  ; rescue StandardError => e ;  puts e ; end
   end
 
   def delete_autoscale(role)
-    auto_scale.update_auto_scaling_group(autoscale_group_name(role),{"LaunchConfigurationName" => launch_configuration_name(role),'MaxSize'=>0,'MinSize'=>0})
-    loadbalancer_instances = describe_load_balancer(load_balancer_name).body['DescribeLoadBalancersResult']['LoadBalancerDescriptions'].first['Instances']
-    loadbalancer_instances.each do |instance|
-      deregister_instance_from_elb(instance)
-      terminate_instance(instance.to_s)
-      sleep 3
-    end
+    begin auto_scale.update_auto_scaling_group(autoscale_group_name(role),{"LaunchConfigurationName" => launch_configuration_name(role),'MaxSize'=>0,'MinSize'=>0}) ; rescue StandardError => e ;  puts e ; end
+      load_balancer = describe_load_balancer
+      unless(load_balancer.nil?)
+        loadbalancer_instances = load_balancer.body['DescribeLoadBalancersResult']['LoadBalancerDescriptions'].first['Instances']
+        loadbalancer_instances.each do |instance|
+          deregister_instance_from_elb(instance)
+          terminate_instance(instance.to_s)
+        end
+      end
     begin delete_auto_scaling_policy(role, 'ScaleUp')   ; rescue StandardError => e ;  puts e ; end
     begin delete_auto_scaling_policy(role, 'ScaleDown') ; rescue StandardError => e ;  puts e ; end
     begin delete_auto_scaling_group(role)               ; rescue StandardError => e ;  puts e ; end
