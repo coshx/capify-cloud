@@ -11,47 +11,13 @@ Capistrano::Configuration.instance(:must_exist).load do
     @autoscale_role ||= ARGV[0].to_s
   end
 
-  namespace :elb do
-
-    desc "Create new load balancer"
-    task :create do
-      puts capify_cloud.create_load_balancer.body['CreateLoadBalancerResult']
-    end
-
-    desc "Deletes load balancer"
-    task :delete do
-      capify_cloud.delete_load_balancer
-    end
-
-    desc "Prints information about load balancer"
-    task :info do
-      puts capify_cloud.describe_load_balancer.body['DescribeLoadBalancersResult']
-    end
-
-  end
-
-  namespace :ami do
-
-    desc "Prints latest ami based on role"
-     task :latest do
-       ami_id = capify_cloud.find_latest_ami(autoscale_role)
-       ami_tags = capify_cloud.image_tags(ami_id)
-       puts ami_id+" "+ami_tags.to_s
-     end
-
-    desc "Creates ami based on role"
-    task :create do
-      capify_cloud.create_ami(autoscale_role)
-    end
-
-    desc "Keeps limited number of ami on AWS"
-    task :cleanup do
-     #
-    end
-  end
-  after "ami", "ami:cleanup"
 
   namespace :autoscale do
+
+    desc "Autoscales deployment of a unique role"
+    task :deploy do
+      capify_cloud.autoscale_deploy(autoscale_role)
+    end
 
     desc "Creates new autoscale configuration"
     task :create do
@@ -60,6 +26,11 @@ Capistrano::Configuration.instance(:must_exist).load do
 
     desc "Creates a new launch configuration"
     task :update do
+      capify_cloud.update_autoscale(autoscale_role)
+    end
+
+    desc "Prints information about load balancers"
+    task :info do
       capify_cloud.update_autoscale(autoscale_role)
     end
 
@@ -74,6 +45,46 @@ Capistrano::Configuration.instance(:must_exist).load do
     end
   end
   after "autoscale", "autoscale:cleanup"
+  namespace :elb do
+
+      desc "Create new load balancer"
+      task :create do
+        puts capify_cloud.create_load_balancer.body['CreateLoadBalancerResult']
+      end
+
+      desc "Deletes load balancer"
+      task :delete do
+        capify_cloud.delete_load_balancer
+      end
+
+      desc "Prints information about load balancers"
+      task :info do
+        puts capify_cloud.describe_load_balancer.body['DescribeLoadBalancersResult']
+      end
+
+    end
+
+    namespace :ami do
+
+      desc "Prints latest ami based on role"
+       task :latest do
+         ami_id = capify_cloud.find_latest_ami(autoscale_role)
+         ami_tags = capify_cloud.image_tags(ami_id)
+         puts ami_id+" "+ami_tags.to_s
+       end
+
+      desc "Creates ami based on role"
+      task :create do
+        capify_cloud.create_ami(autoscale_role)
+      end
+
+      desc "Keeps limited number of ami on AWS"
+      task :cleanup do
+       #
+      end
+    end
+    after "ami", "ami:cleanup"
+
 
   namespace :cloud do
 
