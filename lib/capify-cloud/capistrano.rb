@@ -8,7 +8,7 @@ Capistrano::Configuration.instance(:must_exist).load do
   end
 
   def autoscale_role
-    @autoscale_role ||= ARGV[0].to_s
+    ARGV[0].to_s || variables[:logger].instance_variable_get("@options")[:actions].first
   end
 
 

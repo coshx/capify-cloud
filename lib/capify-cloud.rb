@@ -59,18 +59,6 @@ class CapifyCloud
     @cloudwatch ||= Fog::AWS::CloudWatch.new(:aws_access_key_id => config[:aws_access_key_id], :aws_secret_access_key => config[:aws_secret_access_key], :region => config[:params][:region])
   end
 
-  def load_balancer_name
-    (@cloud_config[:project_tag].gsub(/(\W|\d)/, ""))
-  end
-
-  def launch_configuration_name(role)
-    (role+'_launch_configuration_'+latest_ami_id(role))
-  end
-
-  def autoscale_group_name(role)
-    (role+'_group')
-  end
-
   def image_state(ami)
     compute.describe_images('image-id' => ami.body['imageId']).body['imagesSet'].first['imageState']
   end
@@ -119,6 +107,10 @@ class CapifyCloud
       desired_instances.select {|instance| instance.name == name}.first
   end
 
+  def get_instance_by_id(id)
+      desired_instances.select {|instance| instance.id == id}.first
+  end
+
   def get_instances_by_role(role)
      desired_instances.select {|instance| instance.tags['Roles'].split(%r{,\s*}).include?(role.to_s) rescue false}
   end
@@ -139,10 +131,6 @@ class CapifyCloud
       instance.contact_point.blue, instance.zone_id.magenta, (instance.tags["Roles"] || "").yellow,
       (instance.tags["Options"] || "").yellow
     end
-  end
-
-  def latest_ami_id(role)
-    @latest_ami_id ||= latest_ami(role)
   end
 
   def latest_ami(role)
@@ -166,9 +154,7 @@ class CapifyCloud
   def autoscale_deploy(role)
       #capistano deploy has already updated git in primary instance
       primary = primary_instance(role)
-      if primary.nil?
-        return
-      end
+      return unless !primary.nil?
       new_version = Time.now.utc.iso8601.gsub(':','.')
       compute.delete_tags(primary.id,"Version"=> primary.tags['Version'])
       compute.create_tags(primary.id,"Version"=> new_version)
@@ -182,7 +168,7 @@ class CapifyCloud
         puts "image tag creation failed, please try again in a few minutes."
         return
       end
-      update_autoscale(role)
+      update_autoscale(role, ami.body['imageId'])
   end
 
   def create_ami(instance)
@@ -201,8 +187,7 @@ class CapifyCloud
       puts "image creation failed, please clean up ami on AWS and try again in a few minutes."
       return nil
     else
-      puts "\nok"
-      @latest_ami_id = ami.body['imageId']
+      puts "\nami ok"
       return ami
     end
   end
@@ -222,7 +207,7 @@ class CapifyCloud
     elb.describe_load_balancers(options)
   end
 
-  def describe_load_balancer
+  def describe_load_balancer(load_balancer_name)
     begin elb.describe_load_balancers({"LoadBalancerNames" => load_balancer_name}) ; rescue StandardError => e ;  puts e ; end
   end
 
@@ -238,8 +223,12 @@ class CapifyCloud
     begin auto_scale.describe_auto_scaling_groups('AutoScalingGroupNames' => role+'_group')  ; rescue StandardError => e ;  puts e ; end
   end
 
-  def describe_launch_configurations
-    begin auto_scale.describe_launch_configurations  ; rescue StandardError => e ;  puts e ; end
+  def describe_launch_configurations(options ={})
+    begin auto_scale.describe_launch_configurations(options)  ; rescue StandardError => e ;  puts e ; end
+  end
+
+  def describe_instance(instance_id)
+    compute.describe_instances('instance-id' => instance_id ).body
   end
 
   def create_load_balancer
@@ -250,31 +239,62 @@ class CapifyCloud
     elb.create_load_balancer(zone, load_balancer_name, listeners)
   end
 
-  def create_autoscale(role)
+  def create_autoscale(role, latest_ami = latest_ami(role))
     instance_type = @cloud_config[:AWS][:params][:instance_type]
     zone = @cloud_config[:AWS][:params][:availability_zone]
-    ami = latest_ami_id(role)
-    existing_ami_tags = image_tags(ami)
+    existing_ami_tags = image_tags(latest_ami)
+    launch_configuration_name = role+'_launch_configuration_'+latest_ami
+    autoscale_group_name = role+'_group'
     autoscale_tags = Array.new
     autoscale_tags.push({'key'=>"Name", 'value' => 'autoscale '+role+'.'+existing_ami_tags['Project']})
     existing_ami_tags.each_pair do |k,v|
         autoscale_tags.push({'key'=>k,'value'=>v, 'propagate_at_launch'=> 'true'})
-    end
-    begin auto_scale.create_launch_configuration(ami,instance_type, launch_configuration_name(role))                                               ; rescue StandardError => e ;  puts e ; end
-    begin auto_scale.create_auto_scaling_group(autoscale_group_name(role), zone, launch_configuration_name(role),max = 500, min = 2, {'LoadBalancerNames'=>load_balancer_name,'DefaultCooldown'=>0, 'Tags' => autoscale_tags })   ; rescue StandardError => e ;  puts e ; end
-    begin auto_scale.put_scaling_policy('ChangeInCapacity', autoscale_group_name(role), 'ScaleUp', scaling_adjustment = 1, {})                     ; rescue StandardError => e ;  puts e ; end
-    begin auto_scale.put_scaling_policy('ChangeInCapacity', autoscale_group_name(role), 'ScaleDown', scaling_adjustment = -1, {})                  ; rescue StandardError => e ;  puts e ; end
+        end
+    begin
+      if @cloud_config[:AWS][:load_balanced].include? role
+        load_balancer_name = @cloud_config[:project_tag].gsub(/(\W|\d)/, "")
+        launch_options = {'LoadBalancerNames'=>load_balancer_name,'DefaultCooldown'=>0, 'Tags' => autoscale_tags }
+      else
+        launch_options = {'DefaultCooldown'=>0, 'Tags' => autoscale_tags }
+      end
+      auto_scale.create_launch_configuration(latest_ami,instance_type, launch_configuration_name)
+      auto_scale.create_auto_scaling_group(autoscale_group_name, zone, launch_configuration_name, max = 500, min = 2, launch_options)
+      auto_scale.put_scaling_policy('ChangeInCapacity', autoscale_group_name, 'ScaleUp', scaling_adjustment = 1, {})
+      auto_scale.put_scaling_policy('ChangeInCapacity', autoscale_group_name, 'ScaleDown', scaling_adjustment = -1, {})
+    rescue StandardError => e ;  puts e ; end
   end
 
-  def update_autoscale(role)
+  def update_autoscale(role, latest_ami = latest_ami(role))
     instance_type = @cloud_config[:AWS][:params][:instance_type]
-    begin auto_scale.create_launch_configuration(latest_ami_id(role), instance_type, launch_configuration_name(role))                                        ; rescue StandardError => e ;  puts e ; end
-    begin auto_scale.update_auto_scaling_group(autoscale_group_name(role),{"LaunchConfigurationName" => launch_configuration_name(role),'MaxSize'=>500,'MinSize'=>2, 'DefaultCooldown'=>0})  ; rescue StandardError => e ;  puts e ; end
+    launch_configuration_name = (role+'_launch_configuration_'+latest_ami)
+    autoscale_group_name = role+'_group'
+    begin
+      auto_scale.create_launch_configuration(latest_ami, instance_type, launch_configuration_name) ;
+      auto_scale.update_auto_scaling_group(autoscale_group_name,{"LaunchConfigurationName" => launch_configuration_name})
+    rescue StandardError => e ;  puts e ; end
+    puts "autoscale configuratio updated"
   end
+
+=begin
+ describe_auto_scaling_instances(options = {}) click to toggle source
+
+Returns a description of each Auto Scaling instance in the instance_ids list. If a list is not provided, the service returns the full details of all instances.
+
+This action supports pagination by returning a token if there are more pages to retrieve. To get the next page, call this action again with the returned token as the NextToken parameter.
+Parameters
+
+    options<~Hash>:
+
+        'InstanceIds'<~Array> - The list of Auto Scaling instances to describe. If this list is omitted, all auto scaling instances are described. The list of requested instances cannot contain more than 50 items. If unknown instances are requested, they are ignored with no error.
+=end
 
   def delete_autoscale(role)
-    begin auto_scale.update_auto_scaling_group(autoscale_group_name(role),{"LaunchConfigurationName" => launch_configuration_name(role),'MaxSize'=>500,'MinSize'=>2}) ; rescue StandardError => e ;  puts e ; end
-      load_balancer = describe_load_balancer
+    autoscale_group_name = role+'_group'
+    launch_configuration_name = (role+'_launch_configuration_'+latest_ami(role))
+    options = {"LaunchConfigurationName" => launch_configuration_name,'MaxSize'=>0,'MinSize'=>0}
+    begin auto_scale.update_auto_scaling_group(autoscale_group_name, options) ; rescue StandardError => e ;  puts e ; end
+    load_balancer_name = @cloud_config[:project_tag].gsub(/(\W|\d)/, "")
+    load_balancer = describe_load_balancer(load_balancer_name)
       unless(load_balancer.nil?)
         loadbalancer_instances = load_balancer.body['DescribeLoadBalancersResult']['LoadBalancerDescriptions'].first['Instances']
         loadbalancer_instances.each do |instance|
@@ -293,7 +313,8 @@ class CapifyCloud
   end
 
   def delete_launch_configuration(role)
-    auto_scale.delete_launch_configuration(launch_configuration_name(role))
+    launch_configuration_name = (role+'_launch_configuration_'+latest_ami(role))
+    auto_scale.delete_launch_configuration(launch_configuration_name)
   end
 
   def delete_auto_scaling_group(role)
@@ -305,8 +326,8 @@ class CapifyCloud
   end
 
   def deregister_instance_from_elb(instance_name)
-    return unless @cloud_config[:load_balanced]
-    instance = get_instance_by_name(instance_name)
+    return unless @cloud_config[:AWS][:load_balanced]
+    instance = get_instance_by_id(instance_name)
     return if instance.nil?
     @@load_balancer = get_load_balancer_by_instance(instance.id)
     return if @@load_balancer.nil?
@@ -314,13 +335,14 @@ class CapifyCloud
   end
 
   def register_instance_in_elb(instance_name, load_balancer_name = '')
-    return if !@cloud_config[:load_balanced]
-    instance = get_instance_by_name(instance_name)
+   return if !@cloud_config[:AWS][:load_balanced]
+    instance = get_instance_by_id(instance_name)
     return if instance.nil?
     load_balancer =  get_load_balancer_by_name(load_balancer_name) || @@load_balancer
     return if load_balancer.nil?
 
     elb.register_instances_with_load_balancer(instance.id, load_balancer.id)
+=begin
     fail_after = @cloud_config[:fail_after] || 30
     state = instance_health(load_balancer, instance)
     time_elapsed = 0
@@ -337,6 +359,7 @@ class CapifyCloud
     else
       STDERR.puts "#{instance.name}: tests timed out after #{time_elapsed} seconds."
     end
+=end
   end
 
   def instance_health(load_balancer, instance)
