@@ -8,7 +8,7 @@ Capistrano::Configuration.instance(:must_exist).load do
   end
 
   namespace :deploy do
-    after "deploy:chmod", "autoscale:deploy"
+    after "deploy", "autoscale:deploy"
 
     task :chmod, :except => { :no_release => true } do
       run "#{try_sudo} chmod 600 /home/bitnami/.ssh/id_rsa"
