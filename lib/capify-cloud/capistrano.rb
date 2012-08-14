@@ -8,9 +8,8 @@ Capistrano::Configuration.instance(:must_exist).load do
   end
 
   def autoscale_role
-    ARGV[0].to_s || variables[:logger].instance_variable_get("@options")[:actions].first
+    variables[:logger].instance_variable_get("@options")[:actions].first
   end
-
 
   namespace :autoscale do
 
@@ -127,14 +126,22 @@ Capistrano::Configuration.instance(:must_exist).load do
   end
   
   namespace :deploy do
-    before "deploy", "cloud:deregister_instance"
-    after "deploy", "cloud:register_instance"
-    after "deploy:rollback", "cloud:register_instance"
+    #before "deploy", "cloud:deregister_instance"
+    #after "deploy", "cloud:register_instance"
+    #after "deploy:rollback", "cloud:register_instance"
+  end
+
+  def cloud_stages(stages)
+    stages.each do |stage|
+      task stage do
+        capify_cloud.define_stage(stage)
+      end
+    end
   end
     
   def cloud_roles(*roles)
     server_name = variables[:logger].instance_variable_get("@options")[:actions].first unless variables[:logger].instance_variable_get("@options")[:actions][1].nil?
-    
+
     if !server_name.nil?
       named_instance = capify_cloud.get_instance_by_name(server_name)
   

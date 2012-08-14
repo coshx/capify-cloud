@@ -1,8 +1,8 @@
-
 require 'rubygems'
 require 'fog'
 require 'colored'
 require File.expand_path(File.dirname(__FILE__) + '/capify-cloud/server')
+
 
 class CapifyCloud
   attr_accessor :load_balancer, :instances
@@ -29,8 +29,8 @@ class CapifyCloud
           @instances << server if server.ready?
         end
         else
-        regions = determine_regions(cloud_provider)
-        regions.each do |region|
+          regions = determine_regions(cloud_provider)
+          regions.each do |region|
           servers = Fog::Compute.new(:provider => cloud_provider, :aws_access_key_id => config[:aws_access_key_id],
             :aws_secret_access_key => config[:aws_secret_access_key], :region => region).servers
           servers.each do |server|
@@ -59,6 +59,18 @@ class CapifyCloud
     @cloudwatch ||= Fog::AWS::CloudWatch.new(:aws_access_key_id => config[:aws_access_key_id], :aws_secret_access_key => config[:aws_secret_access_key], :region => config[:params][:region])
   end
 
+  def define_stage(stage)
+    @stage = stage
+  end
+
+  def stage
+      @stage || "staging"
+  end
+
+  def project_tag
+    return @project_tag ||= @cloud_config[:AWS][stage.to_sym][:project_tag]
+  end
+
   def image_state(ami)
     compute.describe_images('image-id' => ami.body['imageId']).body['imagesSet'].first['imageState']
   end
@@ -72,7 +84,7 @@ class CapifyCloud
   end
 
   def project_ami
-    compute.describe_images('tag:Project' => @cloud_config[:project_tag])
+    compute.describe_images('tag:Project' => project_tag)
   end
 
   def server_names
@@ -80,7 +92,7 @@ class CapifyCloud
   end
 
   def project_instances
-    @instances.select {|instance| instance.tags["Project"] == @cloud_config[:project_tag]}
+    @instances.select {|instance| instance.tags["Project"] == project_tag}
   end
 
   def primary_instances
@@ -100,19 +112,19 @@ class CapifyCloud
  end
 
   def desired_instances
-    @cloud_config[:project_tag].nil? ? @instances : project_instances
+    project_tag.nil? ? @instances : project_instances
   end
 
   def get_instance_by_name(name)
-      desired_instances.select {|instance| instance.name == name}.first
+    desired_instances.select {|instance| instance.name == name}.first
   end
 
   def get_instance_by_id(id)
-      desired_instances.select {|instance| instance.id == id}.first
+    desired_instances.select {|instance| instance.id == id}.first
   end
 
   def get_instances_by_role(role)
-     desired_instances.select {|instance| instance.tags['Roles'].split(%r{,\s*}).include?(role.to_s) rescue false}
+    desired_instances.select {|instance| instance.tags['Roles'].split(%r{,\s*}).include?(role.to_s) rescue false}
   end
 
   def get_instances_by_region(roles, region)
@@ -121,7 +133,7 @@ class CapifyCloud
   end
 
   def determine_regions(cloud_provider = 'AWS')
-    @cloud_config[cloud_provider.to_sym][:params][:regions] || [@cloud_config[cloud_provider.to_sym][:params][:region]]
+    @cloud_config[cloud_provider.to_sym][stage.to_sym][:params][:regions] || [@cloud_config[cloud_provider.to_sym][stage.to_sym][:params][:region]]
   end
 
   def display_instances
@@ -232,7 +244,8 @@ class CapifyCloud
   end
 
   def create_load_balancer
-    zone = @cloud_config[:AWS][:params][:availability_zone]
+    load_balancer_name = project_tag.gsub(/(\W|\d)/, "")
+    zone = @cloud_config[:AWS][stage.to_sym][:params][:availability_zone]
     listeners = Array.new
     listeners.push({"Protocol"=>"HTTPS", 'LoadBalancerPort' => 443, "SSLCertificateId"=>"arn:aws:iam::710121801201:server-certificate/NetworkCert", "InstancePort"=>443})
     listeners.push({"Protocol"=>"HTTP", 'LoadBalancerPort' => 80,  "InstancePort"=>80})
@@ -240,8 +253,8 @@ class CapifyCloud
   end
 
   def create_autoscale(role, latest_ami = latest_ami(role))
-    instance_type = @cloud_config[:AWS][:params][:instance_type]
-    zone = @cloud_config[:AWS][:params][:availability_zone]
+    instance_type = @cloud_config[:AWS][stage.to_sym][:params][:instance_type]
+    zone = @cloud_config[:AWS][stage.to_sym][:params][:availability_zone]
     existing_ami_tags = image_tags(latest_ami)
     launch_configuration_name = role+'_launch_configuration_'+latest_ami
     autoscale_group_name = role+'_group'
@@ -251,8 +264,8 @@ class CapifyCloud
         autoscale_tags.push({'key'=>k,'value'=>v, 'propagate_at_launch'=> 'true'})
         end
     begin
-      if @cloud_config[:AWS][:load_balanced].include? role
-        load_balancer_name = @cloud_config[:project_tag].gsub(/(\W|\d)/, "")
+      if @cloud_config[:AWS][stage.to_sym][:params][:load_balanced].include? role
+        load_balancer_name = project_tag.gsub(/(\W|\d)/, "")
         launch_options = {'LoadBalancerNames'=>load_balancer_name,'DefaultCooldown'=>0, 'Tags' => autoscale_tags }
       else
         launch_options = {'DefaultCooldown'=>0, 'Tags' => autoscale_tags }
@@ -265,35 +278,22 @@ class CapifyCloud
   end
 
   def update_autoscale(role, latest_ami = latest_ami(role))
-    instance_type = @cloud_config[:AWS][:params][:instance_type]
+    instance_type = @cloud_config[:AWS][stage.to_sym][:params][:instance_type]
     launch_configuration_name = (role+'_launch_configuration_'+latest_ami)
     autoscale_group_name = role+'_group'
     begin
       auto_scale.create_launch_configuration(latest_ami, instance_type, launch_configuration_name) ;
       auto_scale.update_auto_scaling_group(autoscale_group_name,{"LaunchConfigurationName" => launch_configuration_name})
     rescue StandardError => e ;  puts e ; end
-    puts "autoscale configuratio updated"
+    puts "autoscale configuration updated"
   end
-
-=begin
- describe_auto_scaling_instances(options = {}) click to toggle source
-
-Returns a description of each Auto Scaling instance in the instance_ids list. If a list is not provided, the service returns the full details of all instances.
-
-This action supports pagination by returning a token if there are more pages to retrieve. To get the next page, call this action again with the returned token as the NextToken parameter.
-Parameters
-
-    options<~Hash>:
-
-        'InstanceIds'<~Array> - The list of Auto Scaling instances to describe. If this list is omitted, all auto scaling instances are described. The list of requested instances cannot contain more than 50 items. If unknown instances are requested, they are ignored with no error.
-=end
 
   def delete_autoscale(role)
     autoscale_group_name = role+'_group'
     launch_configuration_name = (role+'_launch_configuration_'+latest_ami(role))
     options = {"LaunchConfigurationName" => launch_configuration_name,'MaxSize'=>0,'MinSize'=>0}
     begin auto_scale.update_auto_scaling_group(autoscale_group_name, options) ; rescue StandardError => e ;  puts e ; end
-    load_balancer_name = @cloud_config[:project_tag].gsub(/(\W|\d)/, "")
+    load_balancer_name = project_tag.gsub(/(\W|\d)/, "")
     load_balancer = describe_load_balancer(load_balancer_name)
       unless(load_balancer.nil?)
         loadbalancer_instances = load_balancer.body['DescribeLoadBalancersResult']['LoadBalancerDescriptions'].first['Instances']
@@ -326,7 +326,7 @@ Parameters
   end
 
   def deregister_instance_from_elb(instance_name)
-    return unless @cloud_config[:AWS][:load_balanced]
+    return unless @cloud_config[:AWS][stage.to_sym][:params][:load_balanced]
     instance = get_instance_by_id(instance_name)
     return if instance.nil?
     @@load_balancer = get_load_balancer_by_instance(instance.id)
@@ -335,7 +335,7 @@ Parameters
   end
 
   def register_instance_in_elb(instance_name, load_balancer_name = '')
-   return if !@cloud_config[:AWS][:load_balanced]
+   return if !@cloud_config[:AWS][stage.to_sym][:params][:load_balanced]
     instance = get_instance_by_id(instance_name)
     return if instance.nil?
     load_balancer =  get_load_balancer_by_name(load_balancer_name) || @@load_balancer
