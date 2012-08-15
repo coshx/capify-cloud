@@ -9,12 +9,6 @@ Capistrano::Configuration.instance(:must_exist).load do
 
   namespace :deploy do
     after "deploy", "autoscale:deploy"
-
-    task :try do
-      puts capify_cloud.describe_load_balancers.body
-    end
-
-
   end
 
   namespace :autoscale do
