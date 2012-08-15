@@ -30,6 +30,7 @@ Capistrano::Configuration.instance(:must_exist).load do
       capify_cloud.delete_all_autoscale_group_instances
     end
     task :delete_groups do
+      sleep(5)
       capify_cloud.delete_all_autoscale_groups
     end
     task :delete_configurations do
