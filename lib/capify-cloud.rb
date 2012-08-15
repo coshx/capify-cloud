@@ -286,7 +286,7 @@ class CapifyCloud
     existing_ami_tags.each_pair do |k,v|
         autoscale_tags.push({'key'=>k,'value'=>v, 'propagate_at_launch'=> 'true'})
     end
-    launch_options = {'KernelId'=>'aki-825ea7eb'}
+    launch_options = {'KernelId'=>'aki-825ea7eb','KeyName' => 'dev-coshx'}
     if @cloud_config[:AWS][stage.to_sym][:params][:load_balanced].include? role.to_s
       create_load_balancer
       load_balancer_name = project_tag.gsub(/(\W|\d)/, "")
