@@ -9,13 +9,10 @@ Capistrano::Configuration.instance(:must_exist).load do
 
   namespace :deploy do
     after "deploy", "autoscale:deploy"
-
-    task :chmod, :except => { :no_release => true } do
-      run "#{try_sudo} chmod 600 /home/bitnami/.ssh/id_rsa"
-    end
   end
 
   namespace :autoscale do
+    before "autoscale:create", "autoscale:chmod"
     after "autoscale:deploy", "autoscale:cleanup", "autoscale:info"
     after "autoscale:create", "autoscale:info"
     after "autoscale:delete", "autoscale:delete_groups", "autoscale:delete_configurations","autoscale:info"
@@ -29,17 +26,14 @@ Capistrano::Configuration.instance(:must_exist).load do
     task :delete do
       terminate_group_instances
     end
-
+    task :terminate_group_instances do
+      capify_cloud.delete_all_autoscale_group_instances
+    end
     task :delete_groups do
       capify_cloud.delete_all_autoscale_groups
     end
-
     task :delete_configurations do
       capify_cloud.delete_all_autoscale_configuration
-    end
-
-    task :terminate_group_instances do
-      capify_cloud.delete_all_autoscale_group_instances
     end
 
     desc "Creates new autoscale configuration"
@@ -55,6 +49,10 @@ Capistrano::Configuration.instance(:must_exist).load do
     desc "Prints information about load balancers"
     task :info do
       begin capify_cloud.autoscale_config_information ; rescue StandardError => e ;  puts e ; end
+    end
+
+    task :chmod, :except => { :no_release => true } do
+      run "#{try_sudo} chmod 600 /home/bitnami/.ssh/id_rsa"
     end
 
     desc "Keeps limited number of prior launch configurations (in keeping with the number of ami)"

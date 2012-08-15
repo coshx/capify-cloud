@@ -285,17 +285,18 @@ class CapifyCloud
     autoscale_tags.push({'key'=>"Name", 'value' => 'autoscale '+role.to_s+'.'+existing_ami_tags['Project']})
     existing_ami_tags.each_pair do |k,v|
         autoscale_tags.push({'key'=>k,'value'=>v, 'propagate_at_launch'=> 'true'})
-        end
+    end
+    launch_options = {'KernelId'=>'aki-825ea7eb'}
+    if @cloud_config[:AWS][stage.to_sym][:params][:load_balanced].include? role.to_s
+      create_load_balancer
+      load_balancer_name = project_tag.gsub(/(\W|\d)/, "")
+      as_group_options = {'LoadBalancerNames'=>load_balancer_name,'DefaultCooldown'=>0, 'Tags' => autoscale_tags }
+    else
+      as_group_options = {'DefaultCooldown'=>0, 'Tags' => autoscale_tags }
+    end
     begin
-      if @cloud_config[:AWS][stage.to_sym][:params][:load_balanced].include? role.to_s
-        create_load_balancer
-        load_balancer_name = project_tag.gsub(/(\W|\d)/, "")
-        launch_options = {'LoadBalancerNames'=>load_balancer_name,'DefaultCooldown'=>0, 'Tags' => autoscale_tags }
-      else
-        launch_options = {'DefaultCooldown'=>0, 'Tags' => autoscale_tags }
-      end
-      auto_scale.create_launch_configuration(latest_ami,instance_type, launch_configuration_name)
-      auto_scale.create_auto_scaling_group(autoscale_group_name, zone, launch_configuration_name, max = 500, min = 2, launch_options)
+      auto_scale.create_launch_configuration(latest_ami, instance_type, launch_configuration_name,launch_options)
+      auto_scale.create_auto_scaling_group(autoscale_group_name, zone, launch_configuration_name, max = 500, min = 2, as_group_options)
       auto_scale.put_scaling_policy('ChangeInCapacity', autoscale_group_name, 'ScaleUp', scaling_adjustment = 1, {})
       auto_scale.put_scaling_policy('ChangeInCapacity', autoscale_group_name, 'ScaleDown', scaling_adjustment = -1, {})
     rescue StandardError => e ;  puts e ; end
