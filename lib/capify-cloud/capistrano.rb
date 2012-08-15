@@ -14,8 +14,7 @@ Capistrano::Configuration.instance(:must_exist).load do
   namespace :autoscale do
     before "autoscale:create", "autoscale:chmod"
     after "autoscale:deploy", "autoscale:cleanup", "autoscale:info"
-    after "autoscale:create", "autoscale:info"
-    after "autoscale:delete", "autoscale:delete_groups", "autoscale:delete_configurations","autoscale:info"
+    after "autoscale:delete", "autoscale:delete_groups", "autoscale:delete_configurations"
 
     desc "Autoscales deployment of a unique role"
     task :deploy do

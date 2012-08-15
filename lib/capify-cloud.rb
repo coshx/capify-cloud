@@ -270,7 +270,7 @@ class CapifyCloud
     load_balancer_name = project_tag.gsub(/(\W|\d)/, "")
     zone = @cloud_config[:AWS][stage.to_sym][:params][:availability_zone]
     listeners = Array.new
-    listeners.push({"Protocol"=>"HTTPS", 'LoadBalancerPort' => 443, "SSLCertificateId"=>"arn:aws:iam::710121801201:server-certificate/NetworkCert", "InstancePort"=>443})
+    listeners.push({"Protocol"=>"HTTPS", "InstanceProtocol"=>"HTTPS",'LoadBalancerPort' => 443, "SSLCertificateId"=>"arn:aws:iam::710121801201:server-certificate/NetworkGoDaddyCert ", "InstancePort"=>443})
     listeners.push({"Protocol"=>"HTTP", 'LoadBalancerPort' => 80,  "InstancePort"=>80})
     elb.create_load_balancer(zone, load_balancer_name, listeners)
   end
