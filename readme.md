@@ -1,41 +1,62 @@
 Capify Cloud
 ====================================================
 
-capify-cloud is used to generate capistrano namespaces using ec2 tags and a hack with Brightbox server-groups to emulate tags.
-Tags are simulated on Brightbox using a server_group containing a ":" (e.g. Roles:web)
+coshx/capify-cloud for automating autoscaled deployment on EC2
 
-eg: If you have 2 servers on amazon's ec2 and a DB server at Brightbox
 
-    server-1 Tag: Roles => "web", Options => "cron,resque, db"
-    server-2 Server-Group: Roles:db
-    server-3 Tag: Roles => "web,db, app"
+------------------------------
+Cap <role> <environment> deploy
 
-Installing
+Deploys git to a prototype instance, then creates a new ami based on the updated prototype instance and updates
+ the autoscale configuration to use the updated ami.
+-----------------------------
 
-    gem install capify-cloud
 
 In your deploy.rb:
 
 ```ruby
 require "capify-cloud/capistrano"
-cloud_roles :web
+
+cloud_stages [:production]
+
+cloud_roles :app, :role2
+
 ```
+
+cloud_roles clarified logic. note that within each role task as declared by cloud_roles, there are capistrano roles
+   being declared to match all the roles contained within any prototype instance
+
+
+```ruby
+def cloud_role(role_name)
+    instances = capify_cloud.get_instances_by_role(role[:name])
+    task role_name do
+      instances.each do |instance|
+        define_role(role, instance)
+        instance_roles = instance.tags["Roles"].split(%r{,\s*})
+        instance_roles.each do |role_tag|
+          define_role({:name => role_tag}, instance)
+        end
+      end
+    end
+  end
+```
+
+
 
 Will generate
 
 ```ruby
-task :server-1 do
-  role :web, {server-1 public dns fetched from Amazon}, :cron=>true, :resque=>true
+
+task :app do
+  role :web, {public dns fetched from Amazon}, :cron=>true, :resque=>true
 end
 
-task :server-3 do
-  role :web, {server-1 public dns fetched from Amazon}
+task :production do
+
 end
 
-task :web do
-  role :web, {server-1 public dns fetched from Amazon}, :cron=>true, :resque=>true
-  role :web, {server-3 public dns fetched from Amazon}
-end
+
 ```
 
 Additionally
