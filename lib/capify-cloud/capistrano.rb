@@ -1,7 +1,7 @@
 require File.join(File.dirname(__FILE__), '../capify-cloud')
 require 'colored'
 
-Capistrano::Configuration.instance(:must_exist).load do  
+Capistrano::Configuration.instance(:must_exist).load do
 
   def capify_cloud
     @capify_cloud ||= CapifyCloud.new(fetch(:cloud_config, 'config/cloud.yml'))
@@ -75,6 +75,7 @@ Capistrano::Configuration.instance(:must_exist).load do
       end
     end
   end
+
   namespace :ami do
     after "ami", "ami:cleanup"
 
@@ -110,12 +111,12 @@ Capistrano::Configuration.instance(:must_exist).load do
     task :server_names do
       puts capify_cloud.server_names.sort
     end
-    
+
     desc "Allows ssh to instance by id. cap ssh <INSTANCE NAME>"
     task :ssh do
       server = variables[:logger].instance_variable_get("@options")[:actions][1]
       instance = numeric?(server) ? capify_cloud.desired_instances[server.to_i] : capify_cloud.get_instance_by_name(server)
-      port = ssh_options[:port] || 22 
+      port = ssh_options[:port] || 22
       command = "ssh -p #{port} #{user}@#{instance.contact_point}"
       puts "Running `#{command}`"
       exec(command)
@@ -166,9 +167,8 @@ Capistrano::Configuration.instance(:must_exist).load do
     end
   end
 
-  def remove_default_roles	 	
+  def remove_default_roles
     roles.reject! { true }
   end
-  
 
 end

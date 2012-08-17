@@ -24,7 +24,7 @@ Notes:
   - Minor refactoring to make the code clearer
   - Updated code to allow commas and any amount of whitespace between options and roles (Thanks ennui2342)
   - Updated documentation to reflect multiple correct formats.
-  
+
 Bugfixes:
 
 ## 1.2.5 (Jan 26, 2012)
@@ -55,14 +55,14 @@ Bugfixes:
 Bugfixes:
 
   - Regression bug fixed. Projects weren't being filtered properly.
-  
+
 ## 1.2.0 (Dec 02, 2011)
 
 Features:
 
   - Much improved performance
   - US-West-1 now available (fog upgrade)
-  
+
 ## 1.1.16 (Sep 23, 2011)
 
 Features:
@@ -81,7 +81,7 @@ Bugfixes:
 
   - Fixed chaining of tasks
   - Fixed handling of defaults and their interactions with specified tasks (particularly across regions)
-  
+
 Features:
 
   - Moved the following to ec2 namespace to make it clearer what's part of the gem

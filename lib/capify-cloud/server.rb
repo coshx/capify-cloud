@@ -9,15 +9,15 @@ module Fog
         def contact_point
           public_ip_address || private_ip_address
         end
-        
+
         def name
           tags["Name"]
         end
-        
+
         def zone_id
           availability_zone
         end
-        
+
         def provider
           'AWS'
         end
@@ -28,7 +28,7 @@ module Fog
         def contact_point
           public_ip_address || private_ip_address
         end
-        
+
         def tags
           tags = server_groups.map {|server_group| server_group["name"]}.select{|tag| tag.include?(":")}
           tags_hash = tags.inject({}) do |map, individual|
@@ -38,7 +38,7 @@ module Fog
           end
           tags_hash
         end
-        
+
         def provider
           'Brightbox'
         end
@@ -46,4 +46,3 @@ module Fog
     end
   end
 end
-  
