@@ -21,7 +21,6 @@ class CapifyCloud
   end
 
   def instances
-    return @instances unless @instance.nil?
     @instances = []
     @cloud_providers.each do |cloud_provider|
       config = @cloud_config[cloud_provider.to_sym]
