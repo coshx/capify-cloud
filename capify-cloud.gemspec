@@ -21,4 +21,5 @@ Gem::Specification.new do |s|
   s.add_dependency('fog', '=1.5.0')
   s.add_dependency('colored', '=1.2')
   s.add_dependency('capistrano')
+  s.add_development_dependency "rspec"
 end
