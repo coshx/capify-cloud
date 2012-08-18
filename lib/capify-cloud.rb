@@ -106,7 +106,7 @@ class CapifyCloud
   end
 
   def primary_instances
-     project_instances.select {|instance| instance.tags['Options'].split(%r{,\s*}).include?('primary') rescue false}
+    project_instances.select {|instance| instance.tags['Options'].split(%r{,\s*}).include?('primary') rescue false}
   end
 
   def desired_instances
@@ -171,7 +171,7 @@ class CapifyCloud
   end
 
   def delete_auto_scaling_group(group_name = role.to_s+'_group')
-      auto_scale.delete_auto_scaling_group(group_name)
+    auto_scale.delete_auto_scaling_group(group_name)
   end
 
   def delete_auto_scaling_policy(policy_name)
@@ -255,9 +255,7 @@ class CapifyCloud
 
   def terminate_instance(instance)
     compute.terminate_instances(instance).body['instancesSet'].first
-    Fog.wait_for do
-      compute_state(instance) == 'terminated'
-    end
+    Fog.wait_for { compute_state(instance) == 'terminated' }
   end
 
   def create_load_balancer
@@ -363,19 +361,14 @@ class CapifyCloud
   def autoscale_config_information
     describe_auto_scaling_groups.body['DescribeAutoScalingGroupsResult'].each do |auto_scaling_group|
       puts "All existing autoscale configurations:"
-      auto_scaling_group.each do |group|
-        if(group.is_a?(Array))
-          group.select {|f| f["AutoScalingGroupName"] }.each do |array|
-            groupname = array['AutoScalingGroupName']
-            launchconfig = array['LaunchConfigurationName']
-            puts "  "+launchconfig
-            puts "    "+groupname
-            if array['Instances'].any?
-              array['Instances'].each do |instances|
-                instances.select {|f| f["InstanceId"] }.each do |key,instance|
-                  puts "      "+instance
-                end
-              end
+      auto_scaling_group.select {|g| g.is_a? Array}.each do |group|
+        group.select {|f| f["AutoScalingGroupName"] }.each do |array|
+          groupname = array['AutoScalingGroupName']
+          launchconfig = array['LaunchConfigurationName']
+          puts "  #{launchconfig}    #{groupname}"
+          array['Instances'].each do |instances|
+            instances.select {|f| f["InstanceId"] }.each do |key,instance|
+              puts "      "+instance
             end
           end
         end
@@ -401,7 +394,7 @@ class CapifyCloud
           array['Instances'].each do |instances|
             instances.select {|f| f["InstanceId"] }.each do |key,instance|
               puts instance
-              if(!launchconfig.nil?)
+              if launchconfig
                 options = {"LaunchConfigurationName" => launchconfig,'MaxSize'=>0,'MinSize'=>0}
                 begin auto_scale.update_auto_scaling_group(groupname, options) ; rescue StandardError => e ;  puts e ; end
               end
@@ -431,11 +424,11 @@ class CapifyCloud
   end
 
   def get_load_balancer_by_name(load_balancer_name)
-     lbs = {}
-     elb.load_balancers.each do |load_balancer|
-       lbs[load_balancer.id] = load_balancer
-     end
-       lbs[load_balancer_name]
+    lbs = {}
+    elb.load_balancers.each do |load_balancer|
+      lbs[load_balancer.id] = load_balancer
+    end
+    lbs[load_balancer_name]
   end
 
   def get_load_balancer_by_instance(instance_id)
@@ -443,7 +436,7 @@ class CapifyCloud
       load_balancer.instances.each {|load_balancer_instance_id| collect[load_balancer_instance_id] = load_balancer}
       collect
     end
-     hash[instance_id]
+    hash[instance_id]
   end
 
 end
