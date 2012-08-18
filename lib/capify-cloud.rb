@@ -28,21 +28,17 @@ class CapifyCloud
       when 'Brightbox'
         servers = Fog::Compute.new(:provider => cloud_provider, :brightbox_client_id => config[:brightbox_client_id],
           :brightbox_secret => config[:brightbox_secret]).servers
-        servers.each do |server|
-          @instances << server if server.ready?
-        end
-        else
-          regions = determine_regions(cloud_provider)
-          regions.each do |region|
+        @instances |= servers.select {|s| s.ready?}
+      else
+        regions = determine_regions(cloud_provider)
+        regions.each do |region|
           servers = Fog::Compute.new(:provider => cloud_provider, :aws_access_key_id => config[:aws_access_key_id],
             :aws_secret_access_key => config[:aws_secret_access_key], :region => region).servers
-          servers.each do |server|
-            @instances << server if server.ready?
-          end
+          @instances |= servers.select {|s| s.ready?}
         end
       end
     end
-    return @instances
+    @instances
   end
 
   def compute
