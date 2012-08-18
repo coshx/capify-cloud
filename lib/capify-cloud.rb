@@ -50,10 +50,12 @@ class CapifyCloud
     config = @cloud_config[:AWS]
     @autoscale ||=Fog::AWS::AutoScaling.new(:aws_access_key_id => config[:aws_access_key_id],:aws_secret_access_key => config[:aws_secret_access_key])
   end
+
   def elb
     config = @cloud_config[:AWS]
     @elb ||= Fog::AWS::ELB.new(:aws_access_key_id => config[:aws_access_key_id], :aws_secret_access_key => config[:aws_secret_access_key], :region => config[stage.to_sym][:params][:region])
   end
+
   def cloudwatch
     config = @cloud_config[:AWS]
     @cloudwatch ||= Fog::AWS::CloudWatch.new(:aws_access_key_id => config[:aws_access_key_id], :aws_secret_access_key => config[:aws_secret_access_key], :region => config[stage.to_sym][:params][:region])
@@ -76,7 +78,7 @@ class CapifyCloud
   end
 
   def project_tag
-    return @project_tag ||= @cloud_config[:AWS][stage.to_sym][:project_tag]
+    @project_tag ||= @cloud_config[:AWS][stage.to_sym][:project_tag]
   end
 
   def image_state(ami)
@@ -88,7 +90,7 @@ class CapifyCloud
   end
 
   def compute_state(instance)
-      compute.describe_instances( 'instance-id' => instance).body['reservationSet'].first['instancesSet'].first['instanceState']['name']
+    compute.describe_instances( 'instance-id' => instance).body['reservationSet'].first['instancesSet'].first['instanceState']['name']
   end
 
   def project_ami
@@ -198,7 +200,7 @@ class CapifyCloud
   end
 
   def find_latest_ami
-    images = Array.new
+    images = []
     ami = project_ami
     unless ami.nil?
       ami.body['imagesSet'].each do |image|
@@ -221,16 +223,14 @@ class CapifyCloud
     compute.delete_tags(primary_instance.id,"Version"=> primary_instance.tags['Version'])
     compute.create_tags(primary_instance.id,"Version"=> new_version)
     ami = create_ami
-    if ami.nil?
-      return
-    end
+    return if ami.nil?
     ami_tags = {"Name"=>role.to_s+'.'+primary_instance.tags["Project"],"Project" => primary_instance.tags["Project"], "Roles" => primary_instance.tags['Roles'], "Version" => new_version, "Options" => "no_release"}
     compute.create_tags(ami.body['imageId'], ami_tags)
     if image_tags(ami.body['imageId']).empty?
       puts "image tag creation failed, please try again in a few minutes."
-      return
+    else
+      update_autoscale(ami.body['imageId'])
     end
-    update_autoscale(ami.body['imageId'])
   end
 
   def create_ami
@@ -247,10 +247,9 @@ class CapifyCloud
     end
     if image_state(ami) == 'failed'
       puts "image creation failed, please try exec cap #{project_tag} #{role.to_s} autoscale:deploy again in a few minutes."
-      return nil
     else
       puts "\nami ok: "+ami.body['imageId']
-      return ami
+      ami
     end
   end
 
@@ -264,9 +263,9 @@ class CapifyCloud
   def create_load_balancer
     load_balancer_name = project_tag.gsub(/(\W|\d)/, "")
     zone = @cloud_config[:AWS][stage.to_sym][:params][:availability_zone]
-    listeners = Array.new
-    listeners.push({"Protocol"=>"HTTPS", "InstanceProtocol"=>"HTTPS",'LoadBalancerPort' => 443, "SSLCertificateId"=>"arn:aws:iam::710121801201:server-certificate/NetworkGoDaddyCert", "InstancePort"=>443})
-    listeners.push({"Protocol"=>"HTTP", 'LoadBalancerPort' => 80,  "InstancePort"=>80})
+    listeners = []
+    listeners << {"Protocol"=>"HTTPS", "InstanceProtocol"=>"HTTPS",'LoadBalancerPort' => 443, "SSLCertificateId"=>"arn:aws:iam::710121801201:server-certificate/NetworkGoDaddyCert", "InstancePort"=>443}
+    listeners << {"Protocol"=>"HTTP", 'LoadBalancerPort' => 80,  "InstancePort"=>80}
     elb.create_load_balancer(zone, load_balancer_name, listeners)
   end
 
@@ -276,10 +275,10 @@ class CapifyCloud
     existing_ami_tags = image_tags(latest_ami)
     launch_configuration_name = stage.to_s+"_"+role.to_s+'_launch_configuration_'+latest_ami
     autoscale_group_name = stage.to_s+"_"+role.to_s+'_group'
-    autoscale_tags = Array.new
-    autoscale_tags.push({'key'=>"Name", 'value' => 'autoscale '+role.to_s+'.'+existing_ami_tags['Project']})
+    autoscale_tags = []
+    autoscale_tags << {'key'=>"Name", 'value' => 'autoscale '+role.to_s+'.'+existing_ami_tags['Project']}
     existing_ami_tags.each_pair do |k,v|
-        autoscale_tags.push({'key'=>k,'value'=>v, 'propagate_at_launch'=> 'true'})
+        autoscale_tags.push << {'key'=>k,'value'=>v, 'propagate_at_launch'=> 'true'}
     end
     launch_options = {'KernelId'=>'aki-825ea7eb','SecurityGroups' =>'application'}
     if @cloud_config[:AWS][stage.to_sym][:params][:load_balanced].include? role.to_s
@@ -336,10 +335,8 @@ class CapifyCloud
     elb.deregister_instances_from_load_balancer(instance.id, @@load_balancer.id)
   end
 
-# @param instance_id [Object]
-# @param load_balancer_name [Object]
   def register_instance_in_elb(instance_id, load_balancer_name = '')
-   return if !@cloud_config[:AWS][stage.to_sym][:params][:load_balanced]
+    return if !@cloud_config[:AWS][stage.to_sym][:params][:load_balanced]
     instance = get_instance_by_id(instance_id)
     return if instance.nil?
     load_balancer =  get_load_balancer_by_name(load_balancer_name) || @@load_balancer
@@ -389,7 +386,7 @@ class CapifyCloud
   def delete_all_autoscale_configuration
     describe_launch_configurations.body['DescribeLaunchConfigurationsResult']['LaunchConfigurations'].each do |configs|
       configs.select {|f| f["LaunchConfigurationName"] }.each do |key,config|
-      puts config
+        puts config
         delete_launch_configuration(config)
       end
     end
@@ -397,23 +394,19 @@ class CapifyCloud
 
   def delete_all_autoscale_group_instances #does not delete primary instances
     describe_auto_scaling_groups.body['DescribeAutoScalingGroupsResult'].each do |auto_scaling_group|
-      auto_scaling_group.each do |group|
-        if(group.is_a?(Array))
-          group.select {|f| f["AutoScalingGroupName"] }.each do |array|
-            launchconfig = array['LaunchConfigurationName']
-            groupname = array['AutoScalingGroupName']
-            if array['Instances'].any?
-              array['Instances'].each do |instances|
-                instances.select {|f| f["InstanceId"] }.each do |key,instance|
-                  puts instance
-                  if(!launchconfig.nil?)
-                    options = {"LaunchConfigurationName" => launchconfig,'MaxSize'=>0,'MinSize'=>0}
-                    begin auto_scale.update_auto_scaling_group(groupname, options) ; rescue StandardError => e ;  puts e ; end
-                  end
-                  deregister_instance_from_elb(instance)
-                  terminate_instance(instance)
-                end
+      auto_scaling_group.select {|g| g.is_a? Array}.each do |group|
+        group.select {|f| f["AutoScalingGroupName"] }.each do |array|
+          launchconfig = array['LaunchConfigurationName']
+          groupname = array['AutoScalingGroupName']
+          array['Instances'].each do |instances|
+            instances.select {|f| f["InstanceId"] }.each do |key,instance|
+              puts instance
+              if(!launchconfig.nil?)
+                options = {"LaunchConfigurationName" => launchconfig,'MaxSize'=>0,'MinSize'=>0}
+                begin auto_scale.update_auto_scaling_group(groupname, options) ; rescue StandardError => e ;  puts e ; end
               end
+              deregister_instance_from_elb(instance)
+              terminate_instance(instance)
             end
           end
         end
@@ -423,13 +416,11 @@ class CapifyCloud
 
   def delete_all_autoscale_groups
     describe_auto_scaling_groups.body['DescribeAutoScalingGroupsResult'].each do |auto_scaling_group|
-      auto_scaling_group.each do |group|
-        if(group.is_a?(Array))
-          group.select {|f| f["AutoScalingGroupName"] }.each do |array|
-            groupname = array['AutoScalingGroupName']
-            puts groupname
-            delete_auto_scaling_group(groupname)
-          end
+      auto_scaling_group.select {|g| g.is_a? Array}.each do |group|
+        group.select {|f| f["AutoScalingGroupName"] }.each do |array|
+          groupname = array['AutoScalingGroupName']
+          puts groupname
+          delete_auto_scaling_group(groupname)
         end
       end
     end
@@ -454,6 +445,5 @@ class CapifyCloud
     end
      hash[instance_id]
   end
-
 
 end
