@@ -41,6 +41,14 @@ class CapifyCloud
     @instances
   end
 
+  def app_name
+    return @cloud_config[:app_name]
+  end
+
+  def db_host
+    @cloud_config[:AWS][stage.to_sym][:params][:db_host]
+  end
+
   def compute
     config = @cloud_config[:AWS]
     @compute ||= Fog::Compute.new(:provider => :AWS, :aws_access_key_id => config[:aws_access_key_id],:aws_secret_access_key => config[:aws_secret_access_key], :region => config[stage.to_sym][:params][:region])
