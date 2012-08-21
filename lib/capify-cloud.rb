@@ -42,11 +42,11 @@ class CapifyCloud
   end
 
   def app_name
-    return @cloud_config[:app_name]
+    @cloud_config[:application]
   end
 
   def db_host
-    @cloud_config[:AWS][stage.to_sym][:params][:db_host]
+    @cloud_config[:AWS][stage.to_sym][:params][:DB_HOST]
   end
 
   def compute
