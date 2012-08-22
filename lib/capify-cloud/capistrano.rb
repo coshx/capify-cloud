@@ -14,24 +14,16 @@ Capistrano::Configuration.instance(:must_exist).load do
   end
 
   namespace :deploy do
-    after "deploy", "deploy:update_environmental_variables", "autoscale:deploy"
+    before "deploy", "deploy:update_environmental_variables"
+    after "deploy", "autoscale:deploy"
 
     task :update_environmental_variables, :except => { :no_release => true } do
       env_var_filename = "."+capify_cloud.app_name
-      bash_profile_filename = ".bash_profile"
-
       env_var_content = <<-EOF
         export DB_HOST=#{capify_cloud.db_host}
       EOF
-      bash_profile_content = <<-EOF
-      if [ -f ~/#{env_var_filename} ]; then
-        source ~/#{env_var_filename}
-      fi
-      EOF
-
       write(env_var_filename,env_var_content)
-      write(bash_profile_filename,bash_profile_content)
-    end
+     end
   end
 
   namespace :autoscale do
