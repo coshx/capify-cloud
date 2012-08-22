@@ -7,9 +7,10 @@ Capistrano::Configuration.instance(:must_exist).load do
     @capify_cloud ||= CapifyCloud.new(fetch(:cloud_config, 'config/cloud.yml'))
   end
 
-  def write(filename,content)
-    run "#{try_sudo} touch ~/#{filename}"
-    run "#{try_sudo} chmod a+w ~/#{filename}"
+  def write(directory, filename,content)
+    begin run "#{try_sudo} mkdir #{directory}" ; rescue StandardError => e ;  puts e ; end
+    run "#{try_sudo} touch #{filename}"
+    run "#{try_sudo} chmod a+w #{filename}"
     put content, filename
   end
 
@@ -18,11 +19,12 @@ Capistrano::Configuration.instance(:must_exist).load do
     after "deploy", "autoscale:deploy"
 
     task :update_environmental_variables, :except => { :no_release => true } do
-      env_var_filename = "."+capify_cloud.app_name
+      directory = fetch(:deploy_to)+"current/shared"
+      env_var_filename = "#{directory}environment.rb"
       env_var_content = <<-EOF
-        export DB_HOST=#{capify_cloud.db_host}
+        ENV['DB_HOST']=#{capify_cloud.db_host}
       EOF
-      write(env_var_filename,env_var_content)
+      write(directory,env_var_filename,env_var_content)
      end
   end
 
