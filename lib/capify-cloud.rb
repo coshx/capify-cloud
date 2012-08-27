@@ -113,8 +113,8 @@ class CapifyCloud
     instances.select {|instance| instance.tags["Project"] == project_tag}
   end
 
-  def primary_instances
-    project_instances.select {|instance| instance.tags['Options'].split(%r{,\s*}).include?('primary') rescue false}
+  def prototype_instances
+    project_instances.select {|instance| instance.tags['Options'].split(%r{,\s*}).include?('prototype') rescue false}
   end
 
   def desired_instances
@@ -186,16 +186,16 @@ class CapifyCloud
     auto_scale.delete_policy(role.to_s+'_group', policy_name)
   end
 
-  def primary_instance
-    role_primary_instance = primary_instances.select {|instance| instance.tags['Roles'].split(%r{,\s*}).include?(role.to_s) rescue false }
-    if(role_primary_instance.nil?)
-      puts "Cannot configure autoscaling: No primary instance tagged with the #{role} role."
+  def prototype_instance
+    role_prototype_instance = prototype_instances.select {|instance| instance.tags['Roles'].split(%r{,\s*}).include?(role.to_s) rescue false }
+    if(role_prototype_instance.nil?)
+      puts "Cannot configure autoscaling: No prototype instance tagged with the #{role} role."
       return
-    elsif (role_primary_instance.size > 1)
-      puts "Cannot configure autoscaling: More than one primary instance is tagged with the #{role} role."
+    elsif (role_prototype_instance.size > 1)
+      puts "Cannot configure autoscaling: More than one prototype instance is tagged with the #{role} role."
       return
     end
-    return role_primary_instance.first
+    return role_prototype_instance.first
   end
 
   def display_instances
@@ -228,11 +228,11 @@ class CapifyCloud
   def autoscale_deploy
     new_version = Time.now.utc.iso8601.gsub(':','.')
 
-    compute.delete_tags(primary_instance.id,"Version"=> primary_instance.tags['Version'])
-    compute.create_tags(primary_instance.id,"Version"=> new_version)
+    compute.delete_tags(prototype_instance.id,"Version"=> prototype_instance.tags['Version'])
+    compute.create_tags(prototype_instance.id,"Version"=> new_version)
     ami = create_ami
     return if ami.nil?
-    ami_tags = {"Name"=>role.to_s+'.'+primary_instance.tags["Project"],"Project" => primary_instance.tags["Project"], "Roles" => primary_instance.tags['Roles'], "Version" => new_version, "Options" => "no_release"}
+    ami_tags = {"Name"=>role.to_s+'.'+prototype_instance.tags["Project"],"Project" => prototype_instance.tags["Project"], "Roles" => prototype_instance.tags['Roles'], "Version" => new_version, "Options" => "no_release"}
     compute.create_tags(ami.body['imageId'], ami_tags)
     if image_tags(ami.body['imageId']).empty?
       puts "image tag creation failed, please try again in a few minutes."
@@ -242,7 +242,7 @@ class CapifyCloud
   end
 
   def create_ami
-    ami = compute.create_image(primary_instance.id,"#{Time.now.utc.iso8601.gsub(':','.')}", "#{Time.now.utc.iso8601.gsub(':','.')}")
+    ami = compute.create_image(prototype_instance.id,"#{Time.now.utc.iso8601.gsub(':','.')}", "#{Time.now.utc.iso8601.gsub(':','.')}")
     puts "creating new ami, this could take a while..."
     progress_output = "."
     Fog.wait_for do
@@ -393,7 +393,7 @@ class CapifyCloud
     end
   end
 
-  def delete_all_autoscale_group_instances #does not delete primary instances
+  def delete_all_autoscale_group_instances #does not delete prototype instances
     describe_auto_scaling_groups.body['DescribeAutoScalingGroupsResult'].each do |auto_scaling_group|
       auto_scaling_group.select {|g| g.is_a? Array}.each do |group|
         group.select {|f| f["AutoScalingGroupName"] }.each do |array|
