@@ -306,8 +306,9 @@ class CapifyCloud
     instance_type = @cloud_config[:AWS][stage.to_sym][:params][:instance_type]
     launch_configuration_name = (stage.to_s+"_"+role.to_s+'_launch_configuration_'+latest_ami)
     autoscale_group_name = stage.to_s+"_"+role.to_s+'_group'
+    launch_options = {'KernelId'=>'aki-825ea7eb','SecurityGroups' =>'application'}
     begin
-      auto_scale.create_launch_configuration(latest_ami, instance_type, launch_configuration_name) ;
+      auto_scale.create_launch_configuration(latest_ami, instance_type, launch_configuration_name,launch_options) ;
       auto_scale.update_auto_scaling_group(autoscale_group_name,{"LaunchConfigurationName" => launch_configuration_name})
     rescue StandardError => e ;  puts e ; end
   end
