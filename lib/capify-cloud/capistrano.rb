@@ -22,6 +22,9 @@ Capistrano::Configuration.instance(:must_exist).load do
       env_var_filename = "#{directory}shared/environment.rb"
       env_var_content = <<-EOF
         ENV['DB_HOST']=\"#{capify_cloud.db_host}\"
+        ENV['FB_APP_ID']=\"#{capify_cloud.fb_app_id}\"
+        ENV['FB_APP_SECRET']=\"#{capify_cloud.fb_app_secret}\"
+        ENV['FB_SITE_URL']=\"#{capify_cloud.fb_site_url}\"
       EOF
       write(env_var_filename,env_var_content)
      end
@@ -35,6 +38,14 @@ Capistrano::Configuration.instance(:must_exist).load do
     desc "Replaces autoscale instances with new instances launched form the latest ami"
     task :replace_outdated_instances do
       capify_cloud.replace_outdated_autoscale_instances
+    end
+
+    task :up do
+      capify_cloud.scale_up
+    end
+
+    task :down do
+      capify_cloud.scale_down
     end
 
     desc "Autoscales deployment of a unique role"

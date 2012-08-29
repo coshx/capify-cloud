@@ -49,6 +49,18 @@ class CapifyCloud
     @cloud_config[:AWS][stage.to_sym][:params][:DB_HOST]
   end
 
+  def fb_app_id
+    @cloud_config[:AWS][stage.to_sym][:params][:FB_APP_ID]
+  end
+
+  def fb_app_secret
+    @cloud_config[:AWS][stage.to_sym][:params][:FB_APP_SECRET]
+  end
+
+  def fb_site_url
+    @cloud_config[:AWS][stage.to_sym][:params][:FB_SITE_URL]
+  end
+
   def compute
     config = @cloud_config[:AWS]
     @compute ||= Fog::Compute.new(:provider => :AWS, :aws_access_key_id => config[:aws_access_key_id],:aws_secret_access_key => config[:aws_secret_access_key], :region => config[stage.to_sym][:params][:region])
@@ -285,7 +297,9 @@ class CapifyCloud
   end
 
   def scale_down
-    auto_scale.execute_policy("ScaleDown")
+    autoscale_group_name = stage.to_s+"_"+role.to_s+'_group'
+
+    auto_scale.execute_policy("ScaleDown",'AutoScalingGroupName' => autoscale_group_name)
   end
 
   def scale_up
