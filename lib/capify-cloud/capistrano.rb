@@ -15,7 +15,7 @@ Capistrano::Configuration.instance(:must_exist).load do
 
   namespace :deploy do
     before "deploy", "deploy:update_environmental_variables"
-    after "deploy", "autoscale:deploy"
+    after "deploy", "autoscale:deploy", "autoscale:replace_outdated_instances"
 
     task :update_environmental_variables, :except => { :no_release => true } do
       directory = fetch(:deploy_to)
@@ -29,8 +29,13 @@ Capistrano::Configuration.instance(:must_exist).load do
 
   namespace :autoscale do
     before "autoscale:create", "autoscale:chmod"
-    after "autoscale:deploy", "autoscale:cleanup", "autoscale:info"
+    after "autoscale:deploy", "autoscale:cleanup"
     after "autoscale:delete", "autoscale:delete_groups", "autoscale:delete_configurations"
+
+    desc "Replaces autoscale instances with new instances launched form the latest ami"
+    task :replace_outdated_instances do
+      capify_cloud.replace_outdated_autoscale_instances
+    end
 
     desc "Autoscales deployment of a unique role"
     task :deploy do
@@ -97,7 +102,7 @@ Capistrano::Configuration.instance(:must_exist).load do
 
     desc "Prints latest ami based on role"
     task :latest do
-      ami_id = capify_cloud.find_latest_ami(autoscale_role)
+      ami_id = capify_cloud.find_latest_ami
       ami_tags = capify_cloud.image_tags(ami_id)
       puts ami_id+" "+ami_tags.to_s
     end

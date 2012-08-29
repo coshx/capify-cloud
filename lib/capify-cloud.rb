@@ -213,12 +213,14 @@ class CapifyCloud
     unless ami.nil?
       ami.body['imagesSet'].each do |image|
         unless image["tagSet"].empty?
-          images.push(image) if image["tagSet"]["Roles"].include? role.to_s
+           if image["tagSet"]["Roles"].include? role.to_s
+             images.push(image)
+           end
         end
       end
     end
     if images.any?
-      images = images.sort{|image1,image2| Time.parse(image2["tagSet"]["Version"]).to_i <=> Time.parse(image1["tagSet"]["Version"]).to_i}
+      images = images.sort{|image1,image2|Time.parse(image2["tagSet"]["Version"].sub(".",":")).to_i <=> Time.parse(image1["tagSet"]["Version"].sub(".",":")).to_i}
       images[0]["imageId"]
     else
       puts "no images with #{role} role"
@@ -264,6 +266,58 @@ class CapifyCloud
   def terminate_instance(instance)
     compute.terminate_instances(instance).body['instancesSet'].first
     Fog.wait_for { compute_state(instance) == 'terminated' }
+  end
+
+  def load_balancer_healthy?
+    load_balancer_name = project_tag.gsub(/(\W|\d)/, "")
+    load_balancer = describe_load_balancer(load_balancer_name)
+    loadbalancer_instances = load_balancer.body['DescribeLoadBalancersResult']['LoadBalancerDescriptions'].first['Instances']
+    healthy = true
+    loadbalancer_instances.each do |instance|
+      if(elb.describe_instance_health(load_balancer_name, instance).body['DescribeInstanceHealthResult']['InstanceStates'][0]['State']!='InService')
+        healthy = false
+      end
+      if compute_state(instance) != 'running'
+        healthy = false
+      end
+    end
+    return healthy
+  end
+
+  def scale_down
+    auto_scale.execute_policy("ScaleDown")
+  end
+
+  def scale_up
+    auto_scale.execute_policy("ScaleUp")
+  end
+
+  def load_balancer_instances
+    load_balancer_name = project_tag.gsub(/(\W|\d)/, "")
+    describe_load_balancer(load_balancer_name).body['DescribeLoadBalancersResult']['LoadBalancerDescriptions'].first['Instances']
+  end
+
+  def replace_outdated_autoscale_instances
+   instance_count = load_balancer_instances.count
+    ami_id = find_latest_ami
+    latest_ami_tags = image_tags(ami_id)
+    puts "replacing outdated instances, this could take a while..."
+    puts "Latest ami id: "+ami_id+" ("+latest_ami_tags["Version"]+")"
+    puts "there are "+instance_count.to_s+' instances to replace'
+    load_balancer_instances.each do |instance|
+      puts "replacing "+instance+" - "+Time.now.utc.to_s
+      terminate_instance(instance.to_s)
+      progress_output = ""
+      Fog.wait_for {
+        STDOUT.write "\r#{progress_output}"
+        progress_output = progress_output+"."
+        if progress_output.length>10
+          progress_output = ''
+        end
+        load_balancer_healthy? && load_balancer_instances.count ==  instance_count
+      }
+      puts "\nok" ;
+    end
   end
 
   def create_load_balancer
