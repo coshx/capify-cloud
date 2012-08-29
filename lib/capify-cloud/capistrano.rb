@@ -21,10 +21,15 @@ Capistrano::Configuration.instance(:must_exist).load do
       directory = fetch(:deploy_to)
       env_var_filename = "#{directory}shared/environment.rb"
       env_var_content = <<-EOF
-        ENV['DB_HOST']=\"#{capify_cloud.db_host}\"
-        ENV['FB_APP_ID']=\"#{capify_cloud.fb_app_id}\"
-        ENV['FB_APP_SECRET']=\"#{capify_cloud.fb_app_secret}\"
-        ENV['FB_SITE_URL']=\"#{capify_cloud.fb_site_url}\"
+
+ENV['DB_HOST']=\"#{capify_cloud.db_host}\"
+
+ENV['FB_APP_ID']=\"#{capify_cloud.fb_app_id}\"
+
+ENV['FB_APP_SECRET']=\"#{capify_cloud.fb_app_secret}\"
+
+ENV['FB_SITE_URL']=\"#{capify_cloud.fb_site_url}\"
+
       EOF
       write(env_var_filename,env_var_content)
      end
