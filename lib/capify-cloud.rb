@@ -309,7 +309,7 @@ class CapifyCloud
     load_balancer_instances.each do |instance|
       puts "replacing "+instance+" - "+Time.now.utc.to_s
       deregister_instance_from_elb(instance.to_s)
-      sleep 60
+      sleep 300
       terminate_instance(instance.to_s)
       progress_output = ""
       Fog.wait_for {
@@ -355,9 +355,8 @@ class CapifyCloud
     begin
       auto_scale.create_launch_configuration(latest_ami, instance_type, launch_configuration_name,launch_options)
       auto_scale.create_auto_scaling_group(autoscale_group_name, zone, launch_configuration_name, max = 500, min = 2, as_group_options)
-      scaling_adjustment = 1
-      auto_scale.put_scaling_policy('ChangeInCapacity', autoscale_group_name, 'ScaleUp', scaling_adjustment = 1, {})
-      auto_scale.put_scaling_policy('ChangeInCapacity', autoscale_group_name, 'ScaleDown', scaling_adjustment = -1, {})
+      auto_scale.put_scaling_policy('ChangeInCapacity', autoscale_group_name, 'ScaleUp', +1, {})
+      auto_scale.put_scaling_policy('ChangeInCapacity', autoscale_group_name, 'ScaleDown', -1, {})
     rescue StandardError => e ;  puts e ; end
   end
 
