@@ -355,6 +355,7 @@ class CapifyCloud
     begin
       auto_scale.create_launch_configuration(latest_ami, instance_type, launch_configuration_name,launch_options)
       auto_scale.create_auto_scaling_group(autoscale_group_name, zone, launch_configuration_name, max = 500, min = 2, as_group_options)
+      scaling_adjustment = 1
       auto_scale.put_scaling_policy('ChangeInCapacity', autoscale_group_name, 'ScaleUp', scaling_adjustment = 1, {})
       auto_scale.put_scaling_policy('ChangeInCapacity', autoscale_group_name, 'ScaleDown', scaling_adjustment = -1, {})
     rescue StandardError => e ;  puts e ; end

@@ -15,7 +15,7 @@ Capistrano::Configuration.instance(:must_exist).load do
 
   namespace :deploy do
     before "deploy", "deploy:update_environmental_variables"
-    after "deploy", "autoscale:deploy", "autoscale:replace_outdated_instances"
+    after "deploy", "db:migrate", "autoscale:deploy", "autoscale:replace_outdated_instances"
 
     task :update_environmental_variables, :except => { :no_release => true } do
       directory = fetch(:deploy_to)
@@ -25,7 +25,15 @@ Capistrano::Configuration.instance(:must_exist).load do
         env_var_content << "ENV['#{key.to_s.upcase}']=\"#{value}\"\n"
       end
       write(env_var_filename,env_var_content)
-     end
+    end
+
+  end
+
+  namespace :db do
+    task :migrate, :except => { :no_release => true } do
+      db_host = capify_cloud.config_params[:DB_HOST]
+      run "cd ~/apps/unwaste_network/current && DB_HOST=#{db_host} RAILS_ENV=production rake db:migrate"
+    end
   end
 
   namespace :autoscale do
