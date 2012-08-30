@@ -351,6 +351,7 @@ class CapifyCloud
     else
       as_group_options = {'DefaultCooldown'=>0, 'Tags' => autoscale_tags }
     end
+    begin delete_launch_configuration(launch_configuration_name) ; rescue StandardError => e ; end
     begin
       auto_scale.create_launch_configuration(latest_ami, instance_type, launch_configuration_name,launch_options)
       auto_scale.create_auto_scaling_group(autoscale_group_name, zone, launch_configuration_name, max = 500, min = 2, as_group_options)
@@ -363,6 +364,7 @@ class CapifyCloud
     instance_type = @cloud_config[:AWS][stage.to_sym][:params][:instance_type]
     launch_configuration_name = (stage.to_s+"_"+role.to_s+'_launch_configuration_'+latest_ami)
     autoscale_group_name = stage.to_s+"_"+role.to_s+'_group'
+    begin delete_launch_configuration(launch_configuration_name) ; rescue StandardError => e ; end
     launch_options = {'KernelId'=>'aki-825ea7eb','SecurityGroups' =>'application'}
     begin
       auto_scale.create_launch_configuration(latest_ami, instance_type, launch_configuration_name,launch_options) ;
