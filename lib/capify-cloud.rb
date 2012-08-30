@@ -45,20 +45,8 @@ class CapifyCloud
     @cloud_config[:application]
   end
 
-  def db_host
-    @cloud_config[:AWS][stage.to_sym][:params][:DB_HOST]
-  end
-
-  def fb_app_id
-    @cloud_config[:AWS][stage.to_sym][:params][:FB_APP_ID]
-  end
-
-  def fb_app_secret
-    @cloud_config[:AWS][stage.to_sym][:params][:FB_APP_SECRET]
-  end
-
-  def fb_site_url
-    @cloud_config[:AWS][stage.to_sym][:params][:FB_SITE_URL]
+  def config_params
+    @cloud_config[:AWS][stage.to_sym][:params]
   end
 
   def compute

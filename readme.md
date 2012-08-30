@@ -17,36 +17,15 @@ updated ami in new scaling activity for that role/environment.
 
 -----------------------------
 
-we'll be writing a file ~/.#{application}, so make sure to source this in your ~/.bashrc BEFORE any lines that return
+Environment variables can be set in `config/cloud.yml` and will be
+written to a `shared/config/environment.rb` on the server, so make sure
+to source this in your application, for example by adding the following
+to `config/environment.rb`:
 
-
-additionally required at the top of application.rb
-
-ENV['DB_HOST'] = File.read("../.unwaste").sub("export DB_HOST=","")
-
-
-for example,
-
-
-require File.expand_path('../boot', __FILE__)
-
-require 'rails/all'
-require 'sunspot_rails'
-require 'delayed_job'
-require 'will_paginate/array'
-require 'dynamic_form'
-
-ENV['DB_HOST'] = File.read("../.unwaste").sub("export DB_HOST=","")
-
-if defined?(Bundler)
-   Bundler.require(:default, :assets, Rails.env)
-end
-
-module Beam
-
-  class Application < Rails::Application
-
-
+```
+local_environment = File.expand_path('../../../shared/environment.rb', File.dirname(__FILE__))
+require local_environment if File.exists?(local_environment)
+```
 -----------------------------
 
 
