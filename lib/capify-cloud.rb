@@ -286,7 +286,6 @@ class CapifyCloud
 
   def scale_down
     autoscale_group_name = stage.to_s+"_"+role.to_s+'_group'
-
     auto_scale.execute_policy("ScaleDown",'AutoScalingGroupName' => autoscale_group_name)
   end
 
@@ -309,7 +308,7 @@ class CapifyCloud
     load_balancer_instances.each do |instance|
       puts "replacing "+instance+" - "+Time.now.utc.to_s
       deregister_instance_from_elb(instance.to_s)
-      sleep 300
+      sleep 300 unless stage == "sandbox"
       terminate_instance(instance.to_s)
       progress_output = ""
       Fog.wait_for {
@@ -320,7 +319,7 @@ class CapifyCloud
         end
         load_balancer_healthy? && load_balancer_instances.count ==  instance_count
       }
-      puts "\nok" ;
+      puts "\nok"
     end
   end
 
