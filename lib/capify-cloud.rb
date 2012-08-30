@@ -300,7 +300,7 @@ class CapifyCloud
   end
 
   def replace_outdated_autoscale_instances
-   instance_count = load_balancer_instances.count
+    instance_count = load_balancer_instances.count
     ami_id = find_latest_ami
     latest_ami_tags = image_tags(ami_id)
     puts "replacing outdated instances, this could take a while..."
@@ -308,6 +308,8 @@ class CapifyCloud
     puts "there are "+instance_count.to_s+' instances to replace'
     load_balancer_instances.each do |instance|
       puts "replacing "+instance+" - "+Time.now.utc.to_s
+      deregister_instance_from_elb(instance.to_s)
+      sleep 60
       terminate_instance(instance.to_s)
       progress_output = ""
       Fog.wait_for {
