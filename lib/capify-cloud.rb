@@ -308,7 +308,7 @@ class CapifyCloud
     load_balancer_instances.each do |instance|
       puts "replacing "+instance+" - "+Time.now.utc.to_s
       deregister_instance_from_elb(instance.to_s)
-      sleep 300 unless stage == "sandbox"
+      sleep 300 unless stage.to_s.include? "sandbox"
       terminate_instance(instance.to_s)
       progress_output = ""
       Fog.wait_for {
