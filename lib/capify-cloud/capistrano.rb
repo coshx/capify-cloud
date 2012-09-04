@@ -166,7 +166,9 @@ Capistrano::Configuration.instance(:must_exist).load do
       if stages.to_s.include? argv
         task argv do
           capify_cloud.define_stage(argv)
-          set :stage, argv if stages.to_s.include? argv.to_s
+          if stages.to_s.include? argv.to_s
+            set :stage, argv
+          end
         end
       end
     end

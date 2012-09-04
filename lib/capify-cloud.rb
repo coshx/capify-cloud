@@ -207,23 +207,37 @@ class CapifyCloud
     end
   end
 
-  def find_latest_ami
+  def role_ami
     images = []
     ami = project_ami
     unless ami.nil?
       ami.body['imagesSet'].each do |image|
         unless image["tagSet"].empty?
-           if image["tagSet"]["Roles"].include? role.to_s
-             images.push(image)
-           end
+          if image["tagSet"]["Roles"].include? role.to_s
+            images.push(image)
+          end
         end
       end
     end
+    return images
+  end
+
+  def find_outdated_ami
+    images = role_ami
     if images.any?
       images = images.sort{|image1,image2|Time.parse(image2["tagSet"]["Version"].sub(".",":")).to_i <=> Time.parse(image1["tagSet"]["Version"].sub(".",":")).to_i}
-      images[0]["imageId"]
-    else
-      puts "no images with #{role} role"
+      images = images - images.take(3)
+      images.each do |i|
+          puts i["imageId"]
+      end
+    end
+  end
+
+  def find_latest_ami
+    images = role_ami
+    if images.any?
+      images = images.sort{|image1,image2|Time.parse(image2["tagSet"]["Version"].sub(".",":")).to_i <=> Time.parse(image1["tagSet"]["Version"].sub(".",":")).to_i}
+      return images[0]["imageId"]
     end
   end
 
