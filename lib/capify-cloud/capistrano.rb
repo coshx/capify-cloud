@@ -163,11 +163,11 @@ Capistrano::Configuration.instance(:must_exist).load do
 
   def cloud_stages(stages)
     ARGV.each do|argv|
-      capify_cloud.define_stage(argv) if stages.to_s.include? argv.to_s
-    end
-    stages.each do |stage|
-      task stage do ;
-        capify_cloud.define_stage(stage) #in case want to change in the middle of deploy.rb method
+      if stages.to_s.include? argv
+        task argv do
+          capify_cloud.define_stage(argv)
+          set :stage, argv if stages.to_s.include? argv.to_s
+        end
       end
     end
   end
