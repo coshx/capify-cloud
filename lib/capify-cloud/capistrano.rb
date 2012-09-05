@@ -26,7 +26,6 @@ Capistrano::Configuration.instance(:must_exist).load do
       end
       write(env_var_filename,env_var_content)
     end
-
   end
 
   namespace :db do
@@ -98,6 +97,7 @@ Capistrano::Configuration.instance(:must_exist).load do
 
     desc "Keeps limited number of prior launch configurations (in keeping with the number of ami)"
     task :cleanup do
+      capify_cloud.remove_outdated_ami
       capify_cloud.describe_auto_scaling_groups.body['DescribeAutoScalingGroupsResult'].each do |auto_scaling_group|
         auto_scaling_group.each do |group|
           if(group.is_a?(Array))
@@ -105,7 +105,9 @@ Capistrano::Configuration.instance(:must_exist).load do
               if array['Instances'].empty?
                 groupname = array['AutoScalingGroupName']
                 launchconfig = array['LaunchConfigurationName']
+                puts "deleting autoscale configuration "+groupname
                 capify_cloud.delete_auto_scaling_group(groupname)
+                capify_cloud.delete_launch_configuration(launchconfig)
               end
             end
           end
@@ -166,9 +168,7 @@ Capistrano::Configuration.instance(:must_exist).load do
       if stages.to_s.include? argv
         task argv do
           capify_cloud.define_stage(argv)
-          if stages.to_s.include? argv.to_s
-            set :stage, argv
-          end
+          set :stage, argv
         end
       end
     end
@@ -176,7 +176,9 @@ Capistrano::Configuration.instance(:must_exist).load do
 
   def cloud_roles(*roles)
     ARGV.each do|argv|
-      capify_cloud.define_role(argv) if roles.to_s.include? argv.to_s
+      if roles.to_s.include? argv.to_s
+        capify_cloud.define_role(argv)
+      end
     end
     roles.each {|role| cloud_role(role)}
   end

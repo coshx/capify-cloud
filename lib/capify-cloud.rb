@@ -86,7 +86,7 @@ class CapifyCloud
   end
 
   def project_tag
-    @project_tag ||= @cloud_config[:AWS][stage.to_sym][:project_tag]
+    @cloud_config[:AWS][stage.to_sym][:project_tag]
   end
 
   def image_state(ami)
@@ -222,28 +222,35 @@ class CapifyCloud
     return images
   end
 
-  def find_outdated_ami
+  def sort_ami(images)
+    images.sort{|image1,image2|Time.parse(image2["tagSet"]["Version"].sub(".",":")).to_i <=> Time.parse(image1["tagSet"]["Version"].sub(".",":")).to_i}
+  end
+
+  def outdated_ami
     images = role_ami
     if images.any?
-      images = images.sort{|image1,image2|Time.parse(image2["tagSet"]["Version"].sub(".",":")).to_i <=> Time.parse(image1["tagSet"]["Version"].sub(".",":")).to_i}
-      images = images - images.take(3)
-      images.each do |i|
-          puts i["imageId"]
-      end
+      images = sort_ami(images)
+      return images - images.take(2)
     end
   end
 
   def find_latest_ami
     images = role_ami
     if images.any?
-      images = images.sort{|image1,image2|Time.parse(image2["tagSet"]["Version"].sub(".",":")).to_i <=> Time.parse(image1["tagSet"]["Version"].sub(".",":")).to_i}
+      images = sort_ami(images)
       return images[0]["imageId"]
+    end
+  end
+
+  def remove_outdated_ami
+    puts "removing outdated ami"
+    outdated_ami.each do |ami|
+      puts compute.deregister_image(ami["imageId"]).body['return']
     end
   end
 
   def autoscale_deploy
     new_version = Time.now.utc.iso8601.gsub(':','.')
-
     compute.delete_tags(prototype_instance.id,"Version"=> prototype_instance.tags['Version'])
     compute.create_tags(prototype_instance.id,"Version"=> new_version)
     ami = create_ami
@@ -325,15 +332,17 @@ class CapifyCloud
       sleep 300 unless stage.to_s.include? "sandbox"
       terminate_instance(instance.to_s)
       progress_output = ""
-      Fog.wait_for {
-        STDOUT.write "\r#{progress_output}"
-        progress_output = progress_output+"."
-        if progress_output.length>10
-          progress_output = ''
-        end
-        load_balancer_healthy? && load_balancer_instances.count ==  instance_count
-      }
-      puts "\nok"
+      begin
+        Fog.wait_for {
+          STDOUT.write "\r#{progress_output}"
+          progress_output = progress_output+"."
+          if progress_output.length>10
+            progress_output = ''
+          end
+          load_balancer_healthy? && load_balancer_instances.count ==  instance_count
+        }
+        puts "\nok"
+      rescue StandardError => e ;  puts e ; end
     end
   end
 
