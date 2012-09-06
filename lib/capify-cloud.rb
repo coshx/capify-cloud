@@ -245,7 +245,11 @@ class CapifyCloud
   def remove_outdated_ami
     puts "removing outdated ami"
     outdated_ami.each do |ami|
-      puts compute.deregister_image(ami["imageId"]).body['return']
+     if compute.deregister_image(ami["imageId"]).body['return'] == true
+       puts 'ok'
+     else
+       puts 'failed to deregister old image - please clean up manually'
+     end
     end
   end
 
@@ -339,7 +343,12 @@ class CapifyCloud
           if progress_output.length>10
             progress_output = ''
           end
-          load_balancer_healthy? && load_balancer_instances.count ==  instance_count
+          begin
+            load_balancer_healthy? && load_balancer_instances.count ==  instance_count
+          rescue StandardError => e
+            puts e
+            false
+          end
         }
         puts "\nok"
       rescue StandardError => e ;  puts e ; end

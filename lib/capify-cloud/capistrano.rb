@@ -69,8 +69,8 @@ Capistrano::Configuration.instance(:must_exist).load do
       begin
         capify_cloud.delete_all_autoscale_groups
       rescue StandardError => e ;
-        puts e
-        puts "Instances probably not fully deleted on AWS. Just run delete again and it should go through" ; end
+        capify_cloud.delete_all_autoscale_groups
+      end
     end
     task :delete_configurations do
       capify_cloud.delete_all_autoscale_configuration
