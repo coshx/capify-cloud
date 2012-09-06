@@ -346,7 +346,6 @@ class CapifyCloud
           begin
             load_balancer_healthy? && load_balancer_instances.count ==  instance_count
           rescue StandardError => e
-            puts e
             false
           end
         }
