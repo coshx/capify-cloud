@@ -16,6 +16,8 @@ Capistrano::Configuration.instance(:must_exist).load do
   namespace :deploy do
     before "deploy", "deploy:update_environmental_variables"
     after "deploy", "db:migrate", "autoscale:deploy", "autoscale:replace_outdated_instances"
+    before "deploy:web:disable", "web"
+    before "deploy:web:enable", "web"
 
     task :update_environmental_variables, :except => { :no_release => true } do
       directory = fetch(:deploy_to)
@@ -176,12 +178,18 @@ Capistrano::Configuration.instance(:must_exist).load do
   end
 
   def cloud_roles(*roles)
+    task :web do
+      capify_cloud.get_instances_by_role(:web).each do |instance|   #get_web_instances
+        role :web, instance.contact_point
+      end
+    end
     ARGV.each do|argv|
       if roles.to_s.include? argv.to_s
         capify_cloud.define_role(argv)
+        cloud_role(argv)
       end
     end
-    roles.each {|role| cloud_role(role)}
+
   end
 
   def cloud_role(role_name_or_hash)
