@@ -360,7 +360,7 @@ class CapifyCloud
 
   def create_load_balancer
     load_balancer_name = project_tag.gsub(/(\W|\d)/, "")
-    zone = @cloud_config[:AWS][stage.to_sym][:params][:availability_zone]
+    zone = config_params[:availability_zone]
     listeners = []
     listeners << {"Protocol"=>"HTTPS", "InstanceProtocol"=>"HTTPS",'LoadBalancerPort' => 443, "SSLCertificateId"=>"arn:aws:iam::710121801201:server-certificate/NetworkGoDaddyCert", "InstancePort"=>443}
     listeners << {"Protocol"=>"HTTP", 'LoadBalancerPort' => 80,  "InstancePort"=>80}
@@ -368,18 +368,23 @@ class CapifyCloud
   end
 
   def create_autoscale(latest_ami = find_latest_ami)
-    instance_type = @cloud_config[:AWS][stage.to_sym][:params][:instance_type]
-    zone = @cloud_config[:AWS][stage.to_sym][:params][:availability_zone]
+    instance_type = config_params[:instance_type]
+    zone = config_params[:availability_zone]
+    min_instances = config_params[:min_instances] || 1
+    max_instances = config_params[:max_instances] || 5
+    kernel_id = config_params[:kernel_id]
+    security_group = config_params[:security_group]
+
     existing_ami_tags = image_tags(latest_ami)
     launch_configuration_name = stage.to_s+"_"+role.to_s+'_launch_configuration_'+latest_ami
     autoscale_group_name = stage.to_s+"_"+role.to_s+'_group'
     autoscale_tags = []
     autoscale_tags << {'key'=>"Name", 'value' => 'autoscale '+role.to_s+'.'+existing_ami_tags['Project']}
     existing_ami_tags.each_pair do |k,v|
-        autoscale_tags.push << {'key'=>k,'value'=>v, 'propagate_at_launch'=> 'true'}
+      autoscale_tags.push << {'key'=>k,'value'=>v, 'propagate_at_launch'=> 'true'}
     end
-    launch_options = {'KernelId'=>'aki-825ea7eb','SecurityGroups' =>'application'}
-    if @cloud_config[:AWS][stage.to_sym][:params][:load_balanced].include? role.to_s
+    launch_options = {'KernelId' => kernel_id, 'SecurityGroups' => security_group}
+    if config_params[:load_balanced].include? role.to_s
       create_load_balancer
       load_balancer_name = project_tag.gsub(/(\W|\d)/, "")
       as_group_options = {'LoadBalancerNames'=>load_balancer_name,'DefaultCooldown'=>0, 'Tags' => autoscale_tags }
@@ -388,21 +393,24 @@ class CapifyCloud
     end
     begin delete_launch_configuration(launch_configuration_name) ; rescue StandardError => e ; end
     begin
-      auto_scale.create_launch_configuration(latest_ami, instance_type, launch_configuration_name,launch_options)
-      auto_scale.create_auto_scaling_group(autoscale_group_name, zone, launch_configuration_name, max = 500, min = 2, as_group_options)
+      auto_scale.create_launch_configuration(latest_ami, instance_type, launch_configuration_name, launch_options)
+      auto_scale.create_auto_scaling_group(autoscale_group_name, zone, launch_configuration_name, max_instances, min_instances, as_group_options)
       auto_scale.put_scaling_policy('ChangeInCapacity', autoscale_group_name, 'ScaleUp', +1, {})
       auto_scale.put_scaling_policy('ChangeInCapacity', autoscale_group_name, 'ScaleDown', -1, {})
     rescue StandardError => e ;  puts e ; end
   end
 
   def update_autoscale(latest_ami = find_latest_ami)
-    instance_type = @cloud_config[:AWS][stage.to_sym][:params][:instance_type]
+    instance_type = config_params[:instance_type]
+    kernel_id = config_params[:kernel_id]
+    security_group = config_params[:security_group]
+
     launch_configuration_name = (stage.to_s+"_"+role.to_s+'_launch_configuration_'+latest_ami)
     autoscale_group_name = stage.to_s+"_"+role.to_s+'_group'
     begin delete_launch_configuration(launch_configuration_name) ; rescue StandardError => e ; end
-    launch_options = {'KernelId'=>'aki-825ea7eb','SecurityGroups' =>'application'}
+    launch_options = {'KernelId' => kernel_id, 'SecurityGroups' => security_group}
     begin
-      auto_scale.create_launch_configuration(latest_ami, instance_type, launch_configuration_name,launch_options) ;
+      auto_scale.create_launch_configuration(latest_ami, instance_type, launch_configuration_name, launch_options) ;
       auto_scale.update_auto_scaling_group(autoscale_group_name,{"LaunchConfigurationName" => launch_configuration_name})
     rescue StandardError => e ;  puts e ; end
   end
@@ -428,7 +436,7 @@ class CapifyCloud
   end
 
   def deregister_instance_from_elb(instance_id)
-    return unless @cloud_config[:AWS][stage.to_sym][:params][:load_balanced]
+    return unless config_params[:load_balanced]
     instance = get_instance_by_id(instance_id)
     return if instance.nil?
     @@load_balancer = get_load_balancer_by_instance(instance.id)
@@ -437,7 +445,7 @@ class CapifyCloud
   end
 
   def register_instance_in_elb(instance_id, load_balancer_name = '')
-    return if !@cloud_config[:AWS][stage.to_sym][:params][:load_balanced]
+    return unless config_params[:load_balanced]
     instance = get_instance_by_id(instance_id)
     return if instance.nil?
     load_balancer =  get_load_balancer_by_name(load_balancer_name) || @@load_balancer
