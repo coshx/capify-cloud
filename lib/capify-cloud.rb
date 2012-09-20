@@ -402,6 +402,8 @@ class CapifyCloud
 
   def update_autoscale(latest_ami = find_latest_ami)
     instance_type = config_params[:instance_type]
+    min_instances = config_params[:min_instances] || 1
+    max_instances = config_params[:max_instances] || 5
     kernel_id = config_params[:kernel_id]
     security_group = config_params[:security_group]
 
@@ -411,7 +413,7 @@ class CapifyCloud
     launch_options = {'KernelId' => kernel_id, 'SecurityGroups' => security_group}
     begin
       auto_scale.create_launch_configuration(latest_ami, instance_type, launch_configuration_name, launch_options) ;
-      auto_scale.update_auto_scaling_group(autoscale_group_name,{"LaunchConfigurationName" => launch_configuration_name})
+      auto_scale.update_auto_scaling_group(autoscale_group_name,{"LaunchConfigurationName" => launch_configuration_name, "MinSize" => min_instances, "MaxSize" => max_instances})
     rescue StandardError => e ;  puts e ; end
   end
 
