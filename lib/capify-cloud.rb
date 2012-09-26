@@ -129,6 +129,10 @@ class CapifyCloud
     desired_instances.select {|instance| instance.tags['Roles'].split(%r{,\s*}).include?(role.to_s) rescue false}
   end
 
+  def get_prototype_by_role(role)
+      prototype_instances.select {|instance| instance.tags['Roles'].split(%r{,\s*}).include?(role.to_s) rescue false}
+  end
+
   def get_web_instances
     desired_instances.select {|instance| instance.tags['Roles'].split(%r{,\s*}).include?('web') && !instance.tags['Options'].split(%r{,\s*}).include?('prototype')  rescue false}
   end

@@ -15,7 +15,7 @@ Capistrano::Configuration.instance(:must_exist).load do
 
   namespace :deploy do
     before "deploy", "deploy:update_environmental_variables"
-    after "deploy", "db:migrate", "autoscale:deploy", "autoscale:replace_outdated_instances"
+    after "deploy", "db:migrate", "autoscale:deploy", "autoscale:cleanup", "autoscale:replace_outdated_instances"
     before "deploy:web:disable", "web"
     before "deploy:web:enable", "web"
 
@@ -39,7 +39,6 @@ Capistrano::Configuration.instance(:must_exist).load do
 
   namespace :autoscale do
     before "autoscale:create", "autoscale:chmod"
-    after "autoscale:deploy", "autoscale:cleanup"
     after "autoscale:delete", "autoscale:delete_groups", "autoscale:delete_configurations"
 
     desc "Replaces autoscale instances with new instances launched form the latest ami"
@@ -179,23 +178,22 @@ Capistrano::Configuration.instance(:must_exist).load do
 
   def cloud_roles(*roles)
     task :web do
-      capify_cloud.get_instances_by_role(:web).each do |instance|   #get_web_instances
+      capify_cloud.get_instances_by_role(:web).each do |instance|
         role :web, instance.contact_point
       end
     end
     ARGV.each do|argv|
-      if roles.to_s.include? argv.to_s
-        capify_cloud.define_role(argv)
-        cloud_role(argv)
+      if roles.to_s.include? role = argv
+        capify_cloud.define_role(role)
+        capistrano_roles(role)
       end
     end
-
   end
 
-  def cloud_role(role_name_or_hash)
+  def capistrano_roles(role_name_or_hash)
     role = role_name_or_hash.is_a?(Hash) ? role_name_or_hash : {:name => role_name_or_hash,:options => {}}
     @roles[role[:name]]
-    instances = capify_cloud.get_instances_by_role(role[:name])
+    instances = capify_cloud.get_prototype_by_role(role[:name])
     task role[:name].to_sym do
       remove_default_roles
       instances.each do |instance|
