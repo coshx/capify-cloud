@@ -1,10 +1,16 @@
+:application: 'unwaste'
 :cloud_providers: ['AWS']
-:project_tag: "example_project"
-
 :AWS:
   :aws_access_key_id: 'aws_access_key_id'
   :aws_secret_access_key: 'aws_secret_access_key'
-  :params:
-    :region: 'us-east-1'
-    :instance_type: 't1.micro'
-
+  :sandbox:
+    :params:
+      :ENV_STAGE: 'sandbox'
+      :region: 'us-east-1'
+      :availability_zone: 'us-east-1a'
+      :instance_type: 'm1.medium'
+      :load_balanced: app
+      :min_instances: 0
+      :max_instances: 1
+      :kernel_id: 'aki-825ea7eb'
+      :security_group: 'application_sandbox'
