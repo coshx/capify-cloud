@@ -1,4 +1,4 @@
-require File.join(File.dirname(__FILE__), '../capify-cloud')
+require File.join(File.dirname(__FILE__), 'lib/capify-cloud')
 require 'colored'
 
 Capistrano::Configuration.instance(:must_exist).load do
@@ -14,10 +14,11 @@ Capistrano::Configuration.instance(:must_exist).load do
       return if capify.role.nil? || capify.stage.nil?
       #migrate_database
       #update_env_var()
-      prototype_instance = capify.get_instance_by_ip(find_servers_for_task(current_task).first)  #find_servers_for_task and current_task defined by capistrano
+      prototype_ip = find_servers_for_task(current_task).first   #find_servers_for_task and current_task defined by capistrano
+      prototype_instance = capify.get_instance_by_ip(prototype_ip)
       image = capify.create_image(prototype_instance)
       capify.update_autoscale(image)
-      #cloud.replace_outdated_instances(image.id)
+      capify.update_loadbalancer
       #cloud.cleanup()
     end
 

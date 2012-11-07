@@ -1,7 +1,7 @@
-require File.expand_path(File.dirname(__FILE__) + '/capify-cloud/lib/images')
-require File.expand_path(File.dirname(__FILE__) + '/capify-cloud/lib/instances')
-require File.expand_path(File.dirname(__FILE__) + '/capify-cloud/lib/autoscaling')
-require File.expand_path(File.dirname(__FILE__) + '/capify-cloud/lib/elb')
+require File.expand_path(File.dirname(__FILE__) + '/lib/images')
+require File.expand_path(File.dirname(__FILE__) + '/lib/instances')
+require File.expand_path(File.dirname(__FILE__) + '/lib/autoscaling')
+require File.expand_path(File.dirname(__FILE__) + '/lib/elb')
 
 class CapifyCloud
   require 'fog'
@@ -21,14 +21,15 @@ class CapifyCloud
   def create_image(prototype_instance) ; images.create(prototype_instance) end
   def create_autoscale(image) ; autoscale.create(image, stage) end
   def update_autoscale(image) ; autoscale.update(image) end
-  def create_loadbalancer(stage) ; elb.create(stage) end
+  def create_loadbalancer ; elb.create(config_params[:availability_zone]) end
+  def update_loadbalancer ; elb.update end
 
   private
   def cloud_config ; @cloud_config end
   def instances ; @instances ||= Instances.new(compute_connection) end
   def images ; @images ||= Images.new(compute_connection) end
   def autoscale ; @autoscale ||= Autoscale.new(autoscale_connection, config_params, role, stage) end
-  def elb ; @elb ||= Elb.new(elb_connection, config_params) end
+  def elb ; @elb ||= Elb.new(elb_connection, compute_connection, stage) end
   def compute_connection ; @compute_connection ||= Fog::Compute.new(:provider => :AWS, :aws_access_key_id => @cloud_config[:AWS][:aws_access_key_id],:aws_secret_access_key => @cloud_config[:AWS][:aws_secret_access_key], :region => @cloud_config[:AWS][stage.to_sym][:params][:region]) end
   def autoscale_connection; @autoscale_connection ||=Fog::AWS::AutoScaling.new(:aws_access_key_id => @cloud_config[:AWS][:aws_access_key_id],:aws_secret_access_key => @cloud_config[:AWS][:aws_secret_access_key]) end
   def elb_connection; @elb_connection ||= Fog::AWS::ELB.new(:aws_access_key_id => @cloud_config[:AWS][:aws_access_key_id], :aws_secret_access_key => @cloud_config[:AWS][:aws_secret_access_key], :region => @cloud_config[:AWS][stage.to_sym][:params][:region]) end

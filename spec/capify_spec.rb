@@ -1,7 +1,6 @@
 require 'rubygems'
 require 'json'
-require_relative '../lib/capify-cloud'
-require_relative '../spec/support/IAM_helper'
+require_relative '../app/capify-cloud/capify-cloud'
 
 def capify
   @capify_cloud ||= CapifyCloud.new(File.dirname(File.expand_path(__FILE__)) + '/support/cloud.yml' )
@@ -9,6 +8,14 @@ end
 
 def compute
   capify.instance_eval{compute_connection}
+end
+
+def elb_class
+  capify.instance_eval{elb}
+end
+
+def elb_connection
+  capify.instance_eval{elb_connection}
 end
 
 def config
@@ -49,15 +56,39 @@ describe "Capify" do
   end
 
   describe "create_loadbalancer" do
+    it "returns a Fog loadbalancer" do
+      capify.create_loadbalancer.should be_an_instance_of(Fog::AWS::ELB::LoadBalancer)
+    end
+  end
+
+  describe "update_loadbalancer" do
+
+    before (:each) do
+      Fog.should_receive(:wait_for).and_return(true)
+    end
+
+    let(:load_balancer_name){"#{capify.stage}loadbalancer"}
 
     it "returns a Fog loadbalancer" do
-      load_balancer = capify.create_loadbalancer(capify.stage)
-      load_balancer.should be_an_instance_of(Fog::AWS::ELB::LoadBalancer)
+      capify.update_loadbalancer.should be_an_instance_of(Fog::AWS::ELB::LoadBalancer)
+    end
+
+    it "removes and terminates any old instances in preparation for being replaced" do
+      # note: The load balancer spins up new instances according to autoscale configuration
+      instance = compute.run_instances('ami-e565ba8c', 1, 1,'InstanceType' => 'm1.large','SecurityGroup' => 'application','Placement.AvailabilityZone' => 'us-east-1a')#.body['instancesSet'].first
+      elb_connection.register_instances(instance.body['instancesSet'].first['instanceId'], load_balancer_name)
+      sleep 3
+      capify.update_loadbalancer
+      elb_instance_array = elb_class.instance_eval{loadbalancer}.instances
+      instance_state = compute.describe_instances('instance-id' => instance.body['instancesSet'].first['instanceId']).body['reservationSet'].first['instancesSet'].first['instanceState']['name']
+      elb_instance_array.should be_empty
+      instance_state.should eql('shutting-down')
     end
 
   end
 
-  describe "image_create" do
+  describe "create_image" do
+
     let(:prototype) {@prototype}
     let(:image) {@image}
 
@@ -65,13 +96,14 @@ describe "Capify" do
       image.should be_an_instance_of(Fog::Compute::AWS::Image)
     end
 
-    it "creates image with same role and stage as the prototype" do
+    it "creates image with the same role and stage as it's prototype instance" do
       image.tags['Roles'].should eql(prototype.tags['Roles'])
       image.tags['Stage'].should eql(prototype.tags['Stage'])
     end
   end
 
   describe "create_autoscale" do
+
     before(:all) do
       @create_autoscale_return = capify.create_autoscale(@image)
     end
@@ -158,11 +190,7 @@ describe "Capify" do
 end
 
 =begin
-    #instance_id =  "i-#{Fog::Mock.random_hex(8)}"
-
-    let(:stage) { capify.stage }
-    let(:role) { capify.role }
-
+ "i-#{Fog::Mock.random_hex(8)}"
     options = {:block_device_mappings => [{'DeviceName'=>'/dev/sdf1'}], 'KernelId' => 'kernal_id'}
     compute.create_image('instance_id', 'image_name', 'image_desc') #untagged image
     time = Time.now.utc.iso8601
