@@ -1,4 +1,4 @@
-require File.join(File.dirname(__FILE__), 'lib/capify-cloud')
+require File.join(File.dirname(__FILE__), '/capify-cloud')
 require 'colored'
 
 Capistrano::Configuration.instance(:must_exist).load do
@@ -8,23 +8,36 @@ Capistrano::Configuration.instance(:must_exist).load do
     before "deploy:web:enable", "web"
 
     after "deploy", #capistrano deploy
-          "deploy:update_autoscale"
+          "deploy:autoscale"
 
-    task :update_autoscale do
-      #current_server_ips = find_servers_for_task(current_task)
-      #return if capify.role.nil? || capify.stage.nil?
-      #return if current_server_ips.count > 1
-      #prototype_ip = current_server_ips.first
-      #migrate_database
-      #update_env_var()
-      #image = capify.create_image(capify.get_instance_by_ip(prototype_ip))
-      #capify.update_autoscale(image)
-      #capify.update_loadbalancer
-      #cloud.cleanup()
-      capify.
+    task :autoscale do
+      current_servers = find_servers_for_task(current_task)
+      return if capify.role.nil? || capify.stage.nil?
+      return if current_servers.count > 1
+      prototype_ip = current_servers.first
+      migrate_database()
+      update_env_var()
+      image = capify.create_image(capify.get_instance_by_ip(prototype_ip))
+      capify.update_autoscale(image)
+      capify.update_loadbalancer
+      capify.cleanup()
     end
 
   end
+
+  namespace :autoscale do
+    namespace :list do
+      task :default do
+        capify.list_active_configuration()
+      end
+      task :all do
+        capify.list_all_configuration()
+      end
+    end
+  end
+
+
+
 
   def capify ; @lib ||= CapifyCloud.new(fetch(:cloud_config, 'config/cloud.yml')) end
 
@@ -47,7 +60,7 @@ Capistrano::Configuration.instance(:must_exist).load do
       if stages.to_s.include? stage
         capify.stage = stage
         set :stage, stage
-        task argv do ; end
+        task stage do end
       end
     end
   end

@@ -1,6 +1,6 @@
 require 'rubygems'
 require 'json'
-require_relative '../app/capify-cloud/capify-cloud'
+require_relative '../lib/capify-cloud/capify-cloud'
 
 describe "Capify" do
 
@@ -43,20 +43,16 @@ describe "Capify" do
       Fog.should_receive(:wait_for).and_return(true)
     end
 
-    let(:load_balancer_name){"#{capify.stage}loadbalancer"}
-
     it "returns a Fog loadbalancer" do
       capify.update_loadbalancer.should be_an_instance_of(Fog::AWS::ELB::LoadBalancer)
     end
 
     it "removes and terminates any old instances in preparation for being replaced" do
       instance = compute_connection.run_instances('ami-e565ba8c', 1, 1,'InstanceType' => 'm1.large','SecurityGroup' => 'application','Placement.AvailabilityZone' => 'us-east-1a')#.body['instancesSet'].first
-      elb_connection.register_instances(instance.body['instancesSet'].first['instanceId'], load_balancer_name)
-      sleep 3
+      elb_connection.register_instances(instance.body['instancesSet'].first['instanceId'], "#{capify.stage}loadbalancer")
       capify.update_loadbalancer
       elb_instance_array = elb_class.instance_eval{loadbalancer}.instances
       instance_state = compute_connection.describe_instances('instance-id' => instance.body['instancesSet'].first['instanceId']).body['reservationSet'].first['instancesSet'].first['instanceState']['name']
-
       elb_instance_array.should be_empty
       instance_state.should eql('shutting-down')
     end

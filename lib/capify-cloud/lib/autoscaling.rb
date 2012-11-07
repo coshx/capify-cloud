@@ -3,7 +3,8 @@ class Autoscale
   def initialize(connection, config_params, role, stage)
     @connection = connection
     @config_params = config_params
-    @autoscale_group_name = "#{role}_#{stage}_group"
+    @stage = stage
+    @autoscale_group_name = "#{stage}_#{role}_group"
   end
 
   def create(image, load_balancer = nil)
@@ -24,7 +25,60 @@ class Autoscale
     return {:group => @connection.groups.get(@autoscale_group_name), :configuration => @connection.configurations.get(launch_configuration_name)}
   end
 
+  def clean_up
+    active_launch_configuration_name = get_active_launch_config()
+    @connection.describe_launch_configurations.body['DescribeLaunchConfigurationsResult']['LaunchConfigurations'].each do |configs|
+      configs.select {|f| f["LaunchConfigurationName"] }.each do |key,name|
+        if name != active_launch_configuration_name  && name.include?(@stage)
+          @connection.delete_launch_configuration(name)
+        end
+      end
+    end
+  end
+
+  def list_all_configuration
+    @connection.describe_launch_configurations.body['DescribeLaunchConfigurationsResult']['LaunchConfigurations'].each do |configs|
+      configs.select {|f| f["LaunchConfigurationName"] }.each do |key,name|
+        puts name
+      end
+    end
+  end
+
+  def list_active_configuration
+    @connection.describe_auto_scaling_groups.body['DescribeAutoScalingGroupsResult'].each do |auto_scaling_group|
+      auto_scaling_group.select {|g| g.is_a? Array}.each do |group|
+        group.select {|f| f["AutoScalingGroupName"] }.each do |array|
+          groupname = array['AutoScalingGroupName']
+          if groupname.include?(@stage)
+            launchconfig = array['LaunchConfigurationName']
+              puts "load balancer: #{array['LoadBalancerNames'].first}"
+              puts "  autoscaling group: #{groupname}"
+              puts "    launchconfig: #{launchconfig}"
+              puts "      #{array['Instances'].count} number of instances"
+              array['Instances'].each do |instances|
+                instances.select {|f| f["InstanceId"] }.each do |key,instance|
+                  puts "        instance: "+instance
+                end
+              end
+            end
+          end
+        end
+      end
+    end
+  end
+
   private
+  def get_active_launch_config
+    @connection.describe_auto_scaling_groups.body['DescribeAutoScalingGroupsResult'].each do |auto_scaling_group|
+      auto_scaling_group.select {|g| g.is_a? Array}.each do |group|
+        group.select {|f| f["AutoScalingGroupName"] }.each do |array|
+          if array['AutoScalingGroupName'] == @autoscale_group_name ;
+           return array['LaunchConfigurationName']
+          end
+        end
+      end
+    end
+  end
   def instance_type ; @config_params[:instance_type] end
   def min_instances ; @config_params[:min_instances] || 1 end
   def max_instances ; @config_params[:max_instances] || 5 end
@@ -40,4 +94,3 @@ class Autoscale
     return autoscale_tags
   end
 
-end

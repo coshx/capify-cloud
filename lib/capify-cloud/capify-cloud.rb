@@ -23,24 +23,10 @@ class CapifyCloud
   def update_autoscale(image) ; autoscale.update(image) end
   def create_loadbalancer ; elb.create(config_params[:availability_zone]) end
   def update_loadbalancer ; elb.update end
-
-  def cleanup
-    cloud.describe_auto_scaling_groups.body['DescribeAutoScalingGroupsResult'].each do |auto_scaling_group|
-              auto_scaling_group.each do |group|
-                if(group.is_a?(Array))
-                  group.select {|f| f["AutoScalingGroupName"] }.each do |array|
-                    if array['Instances'].empty?
-                      groupname = array['AutoScalingGroupName']
-                      launchconfig = array['LaunchConfigurationName']
-                      puts "deleting autoscale configuration "+groupname
-                      cloud.delete_auto_scaling_group(groupname)
-                      cloud.delete_launch_configuration(launchconfig)
-                    end
-                  end
-                end
-              end
-            end
-  end
+  def list_autoscaling ; autoscale.list_active_configuration() end
+  def clean_up ; autoscale.clean_up() ; images.clean_up() end
+  def list_active_configuration ; autoscale.list_active_configuration() end
+  def list_all_configuration ; autoscale.list_all_configuration() end
 
   private
   def cloud_config ; @cloud_config end
@@ -59,6 +45,32 @@ end
 
 #todo cloud.yml variables within elb.get_listener_array
 #todo cloud.yml variables within autoscale.create - put_scaling_policy - scaleup/down increment
+
+ #compute.describe_instances('ip-address'=>ip).body['reservationSet'].first['instancesSet'].first['instanceId']
+
+
+  def images ; @images || Images.new(compute) end
+  def servers ; @autoscale || Servers.new(compute) end
+  def autoscaling ; @autoscale || Autoscaling.new(compute) end
+  def loadbalancing ; @autoscale || Loadbalancing.new(compute) end
+
+
+  cloud.remove_outdated_ami
+        cloud.describe_auto_scaling_groups.body['DescribeAutoScalingGroupsResult'].each do |auto_scaling_group|
+          auto_scaling_group.each do |group|
+            if(group.is_a?(Array))
+              group.select {|f| f["AutoScalingGroupName"] }.each do |array|
+                if array['Instances'].empty?
+                  groupname = array['AutoScalingGroupName']
+                  launchconfig = array['LaunchConfigurationName']
+                  puts "deleting autoscale configuration "+groupname
+                  cloud.delete_auto_scaling_group(groupname)
+                  cloud.delete_launch_configuration(launchconfig)
+                end
+              end
+            end
+          end
+        end
 
 =end
 
