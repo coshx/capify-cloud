@@ -11,15 +11,17 @@ Capistrano::Configuration.instance(:must_exist).load do
           "deploy:update_autoscale"
 
     task :update_autoscale do
-      return if capify.role.nil? || capify.stage.nil?
+      #current_server_ips = find_servers_for_task(current_task)
+      #return if capify.role.nil? || capify.stage.nil?
+      #return if current_server_ips.count > 1
+      #prototype_ip = current_server_ips.first
       #migrate_database
       #update_env_var()
-      prototype_ip = find_servers_for_task(current_task).first   #find_servers_for_task and current_task defined by capistrano
-      prototype_instance = capify.get_instance_by_ip(prototype_ip)
-      image = capify.create_image(prototype_instance)
-      capify.update_autoscale(image)
-      capify.update_loadbalancer
+      #image = capify.create_image(capify.get_instance_by_ip(prototype_ip))
+      #capify.update_autoscale(image)
+      #capify.update_loadbalancer
       #cloud.cleanup()
+      capify.
     end
 
   end
