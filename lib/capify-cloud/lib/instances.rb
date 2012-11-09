@@ -9,8 +9,15 @@ class Instances
   end
 
   def find_prototype_by_role_and_stage(role, stage)
-    prototype_instances =  @connection.servers.select {|instance| instance.tags["Stage"] == stage}
-    prototype_instances.select {|instance| instance.tags['Roles'].split(%r{,\s*}).include?(role.to_s) rescue false}.first
+    stage_instances =  @connection.servers.select {|instance| instance.tags["Stage"] == stage}
+    stage_instances.select {|instance| instance.tags['Roles'].split(%r{,\s*}).include?(role.to_s) rescue false}.first
+  end
+
+  def print_prototypes
+    prototype_instances = @connection.servers.select {|instance| instance.tags["Options"] == 'prototype'}
+    prototype_instances.each do |instance|
+      puts "#{instance.id} #{instance.tags['Name']}"
+    end
   end
 
   def all

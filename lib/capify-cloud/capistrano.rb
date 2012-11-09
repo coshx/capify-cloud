@@ -26,20 +26,40 @@ Capistrano::Configuration.instance(:must_exist).load do
   end
 
   namespace :autoscale do
-    namespace :list do
+
+    namespace :clean do
       task :default do
-        capify.list_active_configuration()
-      end
-      task :all do
-        capify.list_all_configuration()
+        capify.cleanup()
       end
     end
+
+    namespace :info do
+      task :default do
+        capify.print_active_autoscale()
+      end
+      task :config do
+        capify.print_configuration()
+      end
+      task :configuration do
+        capify.print_configuration()
+      end
+      task :ami do
+        capify.print_images()
+      end
+      task :groups do
+        capify.print_groups()
+      end
+      task :snapshot do
+        capify.print_snapshots()
+      end
+      task :prototype do
+        capify.print_prototypes()
+      end
+    end
+
   end
 
-
-
-
-  def capify ; @lib ||= CapifyCloud.new(fetch(:cloud_config, 'config/cloud.yml')) end
+ def capify ; @lib ||= CapifyCloud.new(fetch(:cloud_config, 'config/cloud.yml')) end
 
   def migrate_database
     db_host = capify.config_params[:DB_HOST]
@@ -75,7 +95,7 @@ Capistrano::Configuration.instance(:must_exist).load do
       if roles.to_s.include? role
         task role.to_sym do
           capify.role = role
-          instance = capify.get_prototype(role)
+          instance = capify.find_prototype_by_role(role)
           role role.to_sym, instance.public_ip_address
         end
       end

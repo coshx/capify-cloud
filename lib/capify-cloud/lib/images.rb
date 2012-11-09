@@ -1,7 +1,9 @@
 class Images
 
-  def initialize(compute_connection)
+  def initialize(compute_connection, role, stage)
     @compute_connection = compute_connection
+    @stage = stage
+    @role = role
   end
 
   def create(prototype_instance)
@@ -24,28 +26,77 @@ class Images
     return image
   end
 
-  def clean_up
-    puts (images_sorted - images_sorted.take(2)).inspect
-  end
-
-  def images
-    @compute_connection.images.select {|image| image.stage == get_stage && image.roles.include?(current_deploy_role.to_s)}
-  end
-
-  def sorted_images
-    images.sort{|image1,image2|Time.parse(image2.version.sub(".",":")).to_i <=> Time.parse(image1.version.sub(".",":")).to_i}
-  end
-
-  def latest_image
-    images_sorted[0].id
-  end
-
-  def remove_outdated_ami
-    outdated_images = images_sorted - images_sorted.take(2)
-    outdated_images.each do |image|
-      compute.deregister_image(image.id)
+  def print_images
+    ami = all_images
+    puts 'all available images'
+    ami.each do |image|
+      snapshot_id = snapshot_id_of_ami(image.id)
+      snapshot =  @compute_connection.snapshots.get(snapshot_id)
+      puts "  #{image.id} -> #{snapshot_id} #{if snapshot.nil?;'(does not exist)'else; '(available)'end}  #{image.tags['Name']}"
     end
   end
+
+  def print_snapshots
+    active = active_snapshots()
+    inactive = inactive_snapshots()
+    puts "  active snapshots"
+    active.each do |snap_id|
+      puts "    #{snap_id} "
+    end
+    if inactive.count>0
+      puts "  snapshots for images which no longer exist"
+      inactive.each do |unused_snap_id|
+        puts "    #{unused_snap_id}"
+      end
+    end
+  end
+
+  private
+
+  def cleanup_snapshots
+    inactive_snapshots.each do |snap_id|
+      puts "deleting snapshot #{snap_id}"
+      @compute_connection.delete_snapshot(snap_id)
+    end
+  end
+
+  def all_images
+    @compute_connection.images.select {|image| !image.is_public}
+  end
+
+  def all_snapshots
+    @compute_connection.snapshots.all
+  end
+
+  def snapshot_id_of_ami(image_id)
+    ami = @compute_connection.images.get(image_id)
+    if ami.nil?
+      return '- snapshot unavailable -'
+    else
+      return ami.block_device_mapping.first['snapshotId']
+    end
+  end
+
+  def active_snapshots
+    active = []
+    all_images.each do |image|
+      snapshot_id = snapshot_id_of_ami(image.id)
+      active.push(snapshot_id)
+    end
+    return active
+  end
+
+  def inactive_snapshots
+   active = active_snapshots()
+   inactive = []
+   all_snapshots.each do |snapshot|
+      if !active.include?(snapshot.id) && snapshot.description.include?("Created by CreateImage")
+        inactive.push(snap.id)
+      end
+    end
+   return inactive
+  end
+
 end
 
 

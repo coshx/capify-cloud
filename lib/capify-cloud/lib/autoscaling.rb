@@ -1,7 +1,8 @@
 class Autoscale
 
-  def initialize(connection, config_params, role, stage)
+  def initialize(connection,compute_connection, config_params, role, stage)
     @connection = connection
+    @compute_connection = compute_connection
     @config_params = config_params
     @stage = stage
     @autoscale_group_name = "#{stage}_#{role}_group"
@@ -26,39 +27,52 @@ class Autoscale
   end
 
   def clean_up
-    active_launch_configuration_name = get_active_launch_config()
-    @connection.describe_launch_configurations.body['DescribeLaunchConfigurationsResult']['LaunchConfigurations'].each do |configs|
+    active_configurations = active_launch_configurations()
+    all_launch_configurations.each do |configs|
       configs.select {|f| f["LaunchConfigurationName"] }.each do |key,name|
-        if name != active_launch_configuration_name  && name.include?(@stage)
+        if !active_configurations.include? (name)
+          launch_config = @connection.configurations.get(name)
+          puts "  deleting #{name}"
           @connection.delete_launch_configuration(name)
+          @compute_connection.delete_image(launch_config.image_id)
         end
       end
     end
   end
 
-  def list_all_configuration
-    @connection.describe_launch_configurations.body['DescribeLaunchConfigurationsResult']['LaunchConfigurations'].each do |configs|
-      configs.select {|f| f["LaunchConfigurationName"] }.each do |key,name|
-        puts name
+  def print_groups
+    autoscaling_groups.each do |auto_scaling_group|
+      auto_scaling_group.select {|g| g.is_a? Array}.each do |group|
+        group.select {|f| f["AutoScalingGroupName"] }.each do |array|
+          puts "  #{array['AutoScalingGroupName']}"
+        end
       end
     end
   end
 
-  def list_active_configuration
-    @connection.describe_auto_scaling_groups.body['DescribeAutoScalingGroupsResult'].each do |auto_scaling_group|
+  def print_configuration
+    puts "  launch configuration files"
+    active = active_launch_configurations
+    all_launch_configurations.each do |config|
+      launch_name = config['LaunchConfigurationName']
+      image = @compute_connection.images.get(config['ImageId'])
+      puts "    #{launch_name} #{if active.include?(launch_name);'(active)' end} -> #{config['ImageId']} #{if image.nil?; ' (unavailable)' else '(available)'end}"
+    end
+  end
+
+  def print_active_autoscale
+    autoscaling_groups.each do |auto_scaling_group|
       auto_scaling_group.select {|g| g.is_a? Array}.each do |group|
         group.select {|f| f["AutoScalingGroupName"] }.each do |array|
           groupname = array['AutoScalingGroupName']
-          if groupname.include?(@stage)
-            launchconfig = array['LaunchConfigurationName']
-              puts "load balancer: #{array['LoadBalancerNames'].first}"
-              puts "  autoscaling group: #{groupname}"
-              puts "    launchconfig: #{launchconfig}"
-              puts "      #{array['Instances'].count} number of instances"
-              array['Instances'].each do |instances|
-                instances.select {|f| f["InstanceId"] }.each do |key,instance|
-                  puts "        instance: "+instance
-                end
+          launchconfig = array['LaunchConfigurationName']
+            puts "load balancer: #{array['LoadBalancerNames'].first}"
+            puts "  autoscaling group: #{groupname}"
+            puts "    launchconfig: #{launchconfig} - #{array['Instances'].count} instances"
+            array['Instances'].each do |instances|
+              instances.select {|f| f["InstanceId"] }.each do |key,instance_id|
+                instance = @compute_connection.servers.get(instance_id)
+                  puts "      instance: #{instance.id} -> #{instance.image_id} -> #{snapshot_id_of_ami(instance.image_id)}"
               end
             end
           end
@@ -68,17 +82,36 @@ class Autoscale
   end
 
   private
-  def get_active_launch_config
-    @connection.describe_auto_scaling_groups.body['DescribeAutoScalingGroupsResult'].each do |auto_scaling_group|
+
+  def all_launch_configurations
+    @connection.describe_launch_configurations.body['DescribeLaunchConfigurationsResult']['LaunchConfigurations']
+  end
+
+  def autoscaling_groups
+    @connection.describe_auto_scaling_groups.body['DescribeAutoScalingGroupsResult']
+  end
+
+  def active_launch_configurations
+    configuration = []
+    autoscaling_groups.each do |auto_scaling_group|
       auto_scaling_group.select {|g| g.is_a? Array}.each do |group|
         group.select {|f| f["AutoScalingGroupName"] }.each do |array|
-          if array['AutoScalingGroupName'] == @autoscale_group_name ;
-           return array['LaunchConfigurationName']
-          end
+          configuration.push(array['LaunchConfigurationName'])
         end
       end
     end
+    return configuration
   end
+
+  def snapshot_id_of_ami(image_id)
+    ami = @compute_connection.images.get(image_id)
+    if !ami.nil?
+      return ami.block_device_mapping.first['snapshotId']
+    else
+      return '- snapshot unavailable -'
+    end
+  end
+
   def instance_type ; @config_params[:instance_type] end
   def min_instances ; @config_params[:min_instances] || 1 end
   def max_instances ; @config_params[:max_instances] || 5 end
