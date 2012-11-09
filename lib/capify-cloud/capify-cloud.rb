@@ -19,7 +19,7 @@ class CapifyCloud
   def update_autoscale(image) ; autoscale.update(image) end
   def create_loadbalancer ; elb.create(config_params[:availability_zone]) end
   def update_loadbalancer ; elb.update end
-  def print_active_autoscale ; autoscale.print_active_autoscale() end
+  def print_autoscale ; autoscale.print_autoscale() end
   def print_configuration ; autoscale.print_configuration() end
   def print_images ; images.print_images() end
   def print_snapshots ; images.print_snapshots() end
@@ -38,7 +38,7 @@ class CapifyCloud
   def instances ; @instances ||= Instances.new(compute_connection) end
   def images ; @images ||= Images.new(compute_connection,role, stage) end
   def autoscale ; @autoscale ||= Autoscale.new(autoscale_connection, compute_connection, config_params, role, stage) end
-  def elb ; @elb ||= Elb.new(elb_connection, compute_connection, stage) end
+  def elb ; @elb ||= Elb.new(elb_connection, compute_connection, config_params, stage) end
 
   def compute_connection ; @compute_connection ||= Fog::Compute.new(:provider => :AWS, :aws_access_key_id => @cloud_config[:AWS][:aws_access_key_id],:aws_secret_access_key => @cloud_config[:AWS][:aws_secret_access_key], :region => @cloud_config[:AWS][stage.to_sym][:params][:region]) end
   def autoscale_connection; @autoscale_connection ||=Fog::AWS::AutoScaling.new(:aws_access_key_id => @cloud_config[:AWS][:aws_access_key_id],:aws_secret_access_key => @cloud_config[:AWS][:aws_secret_access_key]) end

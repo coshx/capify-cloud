@@ -7,21 +7,29 @@ class Images
   end
 
   def create(prototype_instance)
-    image_name = image_desc = "#{Time.now.utc.iso8601.gsub(':','.')}"
-    create_image_response = @compute_connection.create_image(prototype_instance.id,image_name, image_desc)
-    image = @compute_connection.images.get(create_image_response.body['imageId'])
+    puts "  creating new image - this could take a while"
+    time =  Time.now.utc.iso8601.gsub(':','.')
+    image_name = "#{@role}.#{@stage}"
+    create_image_response = @compute_connection.create_image(prototype_instance.id, time, time)
+    image_id = create_image_response.body['imageId']
     progress_output = ''
+    image = @compute_connection.images.get(image_id)
     Fog.wait_for do
-      STDOUT.write "\r#{progress_output}"
+      begin
+      STDOUT.write "\r  #{progress_output}"
       progress_output = progress_output+"."
       if progress_output.length>10 ; progress_output = '' end
+      image = @compute_connection.images.get(image_id)
       image.state != 'pending' || Fog.mocking?
+      rescue Excon::Errors::InternalServerError => e
+        false
+      end
     end
     if image.state == 'failed' && !Fog.mocking?
       puts "image creation failed, please try again in a few minutes."
     else
-      @compute_connection.create_tags(image.id, {"Name"=>'name',"Stage" => prototype_instance.tags["Stage"], "Roles" => prototype_instance.tags['Roles'], "Version" => Time.now.utc.iso8601.gsub(':','.'), "Options" => "no_release"})
-      puts "\nami ok: "+image.id unless Fog.mocking?
+      @compute_connection.create_tags(image.id, {"Name"=> image_name,"Stage" => prototype_instance.tags["Stage"], "Roles" => prototype_instance.tags['Roles'], "Version" => Time.now.utc.iso8601.gsub(':','.'), "Options" => "no_release"})
+      puts "#{progress_output} completed" unless Fog.mocking?
     end
     return image
   end

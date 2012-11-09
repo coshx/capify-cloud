@@ -14,11 +14,13 @@ Capistrano::Configuration.instance(:must_exist).load do
       current_servers = find_servers_for_task(current_task)
       prototype_ip = current_servers.first
       #migrate_database()
-      update_env_var()
-      #image = capify.create_image(capify.get_instance_by_ip(prototype_ip))
-      #capify.update_autoscale(image)
-      #capify.update_loadbalancer
-      #capify.cleanup()
+      #update_env_var()
+      image = capify.create_image(capify.find_instance_by_ip(prototype_ip))
+      unless image.nil?
+        capify.update_autoscale(image)
+        capify.update_loadbalancer
+        capify.cleanup()
+      end
     end
 
   end
@@ -33,7 +35,7 @@ Capistrano::Configuration.instance(:must_exist).load do
 
     namespace :info do
       task :default do
-        capify.print_active_autoscale()
+        capify.print_autoscale()
       end
       task :config do
         capify.print_configuration()
