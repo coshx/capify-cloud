@@ -25,8 +25,7 @@ class CapifyCloud
   def print_snapshots ; images.print_snapshots() end
   def print_prototypes ; instances.print_prototypes() end
   def print_groups ; autoscale.print_groups() end
-
-  def cleanup ; autoscale.cleanup() ; images.cleanup() end
+  def cleanup ; autoscale.cleanup() end
   def find_instance_by_ip(ip) ; instances.find_by_ip(ip) end
   def find_prototype_by_role(role) ; instances.find_prototype_by_role_and_stage(role, stage) end
 

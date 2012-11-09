@@ -26,15 +26,17 @@ class Autoscale
     return {:group => @connection.groups.get(@autoscale_group_name), :configuration => @connection.configurations.get(launch_configuration_name)}
   end
 
-  def clean_up
+  def cleanup
     active_configurations = active_launch_configurations()
     all_launch_configurations.each do |configs|
-      configs.select {|f| f["LaunchConfigurationName"] }.each do |key,name|
-        if !active_configurations.include? (name)
-          launch_config = @connection.configurations.get(name)
-          puts "  deleting #{name}"
-          @connection.delete_launch_configuration(name)
-          @compute_connection.delete_image(launch_config.image_id)
+      configs.select {|f| f["LaunchConfigurationName"] }.each do |key,launch_config_name|
+        if !active_configurations.include? (launch_config_name)
+          image_id = @connection.configurations.get(launch_config_name).image_id
+          snapshot_id = snapshot_id_of_ami(image_id)
+          puts "  deleting #{launch_config_name}, #{image_id} and #{snapshot_id}"
+          @compute_connection.deregister_image(image_id)
+          @compute_connection.delete_snapshot(snapshot_id)
+          @connection.delete_launch_configuration(launch_config_name)
         end
       end
     end

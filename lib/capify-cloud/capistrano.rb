@@ -12,15 +12,13 @@ Capistrano::Configuration.instance(:must_exist).load do
 
     task :autoscale do
       current_servers = find_servers_for_task(current_task)
-      return if capify.role.nil? || capify.stage.nil?
-      return if current_servers.count > 1
       prototype_ip = current_servers.first
-      migrate_database()
+      #migrate_database()
       update_env_var()
-      image = capify.create_image(capify.get_instance_by_ip(prototype_ip))
-      capify.update_autoscale(image)
-      capify.update_loadbalancer
-      capify.cleanup()
+      #image = capify.create_image(capify.get_instance_by_ip(prototype_ip))
+      #capify.update_autoscale(image)
+      #capify.update_loadbalancer
+      #capify.cleanup()
     end
 
   end
@@ -66,10 +64,11 @@ Capistrano::Configuration.instance(:must_exist).load do
     run "cd ~/apps/unwaste_network/current && DB_HOST=#{db_host} RAILS_ENV=production rake db:migrate"
   end
   def update_env_var
+    env_var_content = ''
     capify.config_params.each do |key, value|
-      @env_var_content << "ENV['#{key.to_s.upcase}']=\"#{value}\"\n"
+      env_var_content << "ENV['#{key.to_s.upcase}']=\"#{value}\"\n"
     end
-    write("#{fetch(:deploy_to)}shared/environment.rb",@env_var_content)
+    write("#{fetch(:deploy_to)}shared/environment.rb",env_var_content)
   end
   def write(filename,content)
     run "#{try_sudo} touch #{filename}"
