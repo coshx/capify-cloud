@@ -12,7 +12,9 @@ describe "Capify" do
      @prototype_image = capify.create_image(@prototype_instance)
   end
 
-  let(:compute_connection) {capify.instance_eval{compute_connection}}
+  let(:compute_connection){capify.instance_eval{compute_connection}}
+  let(:autoscale_connection) {capify.instance_eval{autoscale_connection}}
+
   let(:elb_connection) {capify.instance_eval{elb_connection}}
   let(:elb_class) {capify.instance_eval{elb}}
 
@@ -43,13 +45,15 @@ describe "Capify" do
       Fog.should_receive(:wait_for).and_return(true)
     end
 
+    let(:load_balancer_name){capify.instance_eval{elb}.instance_eval{loadbalancer_name}}
+
     it "returns a Fog loadbalancer" do
       capify.update_loadbalancer.should be_an_instance_of(Fog::AWS::ELB::LoadBalancer)
     end
 
-    it "removes and terminates any old instances in preparation for being replaced" do
+    it "removes and terminates outdated instances in preparation for being replaced" do
       instance = compute_connection.run_instances('ami-e565ba8c', 1, 1,'InstanceType' => 'm1.large','SecurityGroup' => 'application','Placement.AvailabilityZone' => 'us-east-1a')#.body['instancesSet'].first
-      elb_connection.register_instances(instance.body['instancesSet'].first['instanceId'], "#{capify.stage}loadbalancer")
+      elb_connection.register_instances(instance.body['instancesSet'].first['instanceId'], load_balancer_name)
       capify.update_loadbalancer
       elb_instance_array = elb_class.instance_eval{loadbalancer}.instances
       instance_state = compute_connection.describe_instances('instance-id' => instance.body['instancesSet'].first['instanceId']).body['reservationSet'].first['instancesSet'].first['instanceState']['name']
@@ -100,6 +104,7 @@ describe "Capify" do
   describe "update_autoscale" do
 
     before(:all) do
+
       @updated_image = capify.create_image(@prototype_instance)
       @update_autoscale_return = capify.update_autoscale(@updated_image)
     end
@@ -113,11 +118,32 @@ describe "Capify" do
     end
 
     it "updates launch configuration with correct image id" do
+       #launch_configuration_image = launch_configurations.first['ImageId']
+       #launch_configuration_image.should eql(@most_recent_image.id)
       update_autoscale_return[:configuration].image_id.should eql(updated_image.id)
     end
 
   end
 
+  describe "cleanup autoscale" do
+
+    before do
+      @most_recent_image = capify.create_image(@prototype_instance)
+      @update_autoscale_return = capify.update_autoscale(@most_recent_image)
+      capify.cleanup()
+    end
+
+    let(:remaining_launch_configuration){autoscale_connection.describe_launch_configurations.body['DescribeLaunchConfigurationsResult']['LaunchConfigurations'].first}
+    let(:active_launch_configuration){autoscale_connection.describe_auto_scaling_groups.body['DescribeAutoScalingGroupsResult'].first.select {|a| a.is_a? Array}.first}
+    let(:another_updated_image){@another_updated_image}
+
+    it "does not delete autoscale configuration files which are being used" do
+      remaining_launch_configuration_name = remaining_launch_configuration['LaunchConfigurationName']
+      active_launch_configuration_name = active_launch_configuration.first["LaunchConfigurationName"]
+      remaining_launch_configuration_name.should eql(active_launch_configuration_name)
+    end
+
+  end
 
   describe "get_instance_by_ip"  do
 
@@ -125,24 +151,24 @@ describe "Capify" do
     let(:ip) {prototype.public_ip_address}
 
     it "returns a Fog Server" do
-      capify.get_instance_by_ip(ip).should be_an_instance_of(Fog::Compute::AWS::Server)
+      capify.find_instance_by_ip(ip).should be_an_instance_of(Fog::Compute::AWS::Server)
     end
 
     it "returns correct server containing the specified ip" do
-      capify.get_instance_by_ip(ip).public_ip_address.should eql(ip)
+      capify.find_instance_by_ip(ip).public_ip_address.should eql(ip)
     end
 
   end
 
-  describe "get_prototype" do
+  describe "prototype" do
 
-    let(:server){capify.get_prototype(capify.role)}
+    let(:server){capify.prototype}
 
     it "returns a Fog Server" do
       server.should be_an_instance_of(Fog::Compute::AWS::Server)
     end
 
-    it "returns prototype server" do
+    it "returns server with correct Options tag" do
       server.tags['Options'].should eql('prototype')
     end
 
@@ -175,11 +201,6 @@ end
 def capify
   @capify ||= CapifyCloud.new(File.dirname(File.expand_path(__FILE__)) + '/support/cloud.yml' )
 end
-
-
-=begin
- "i-#{Fog::Mock.random_hex(8)}"
-=end
 
 
 

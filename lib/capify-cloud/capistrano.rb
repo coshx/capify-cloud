@@ -11,27 +11,17 @@ Capistrano::Configuration.instance(:must_exist).load do
           "deploy:autoscale"
 
     task :autoscale do
-      current_servers = find_servers_for_task(current_task)
-      prototype_ip = current_servers.first
-      #migrate_database()
-      #update_env_var()
-      image = capify.create_image(capify.find_instance_by_ip(prototype_ip))
-      unless image.nil?
-        capify.update_autoscale(image)
-        capify.update_loadbalancer
-        capify.cleanup()
-      end
+      update_env_var(capify.params)
+      migrate_database(capify.database)
+      image = capify.create_image(capify.prototype) ; return if image.nil?
+      capify.update_autoscale(image)
+      capify.update_loadbalancer
+      capify.cleanup
     end
 
   end
 
   namespace :autoscale do
-
-    namespace :clean do
-      task :default do
-        capify.cleanup()
-      end
-    end
 
     namespace :info do
       task :default do
@@ -61,13 +51,12 @@ Capistrano::Configuration.instance(:must_exist).load do
 
  def capify ; @lib ||= CapifyCloud.new(fetch(:cloud_config, 'config/cloud.yml')) end
 
-  def migrate_database
-    db_host = capify.config_params[:DB_HOST]
+  def migrate_database(db_host)
     run "cd ~/apps/unwaste_network/current && DB_HOST=#{db_host} RAILS_ENV=production rake db:migrate"
   end
-  def update_env_var
+  def update_env_var(params)
     env_var_content = ''
-    capify.config_params.each do |key, value|
+    params.each do |key, value|
       env_var_content << "ENV['#{key.to_s.upcase}']=\"#{value}\"\n"
     end
     write("#{fetch(:deploy_to)}shared/environment.rb",env_var_content)
@@ -75,30 +64,32 @@ Capistrano::Configuration.instance(:must_exist).load do
   def write(filename,content)
     run "#{try_sudo} touch #{filename}"
     run "#{try_sudo} chmod a+w #{filename}"
+    put content, filename
   end
   def cloud_stages(stages)
     ARGV.each do|stage|
       if stages.to_s.include? stage
         capify.stage = stage
         set :stage, stage
-        task stage do end
+        task stage do end #cap will still run 'stage' task, although not needed
       end
     end
   end
   def cloud_roles(*roles)
     reject_default_roles
-    task :web do
-      capify.get_instances_by_role(:web).each do |instance|
-        role :web, instance.public_ip_address
-      end
-    end
     ARGV.each do|role|
       if roles.to_s.include? role
         task role.to_sym do
           capify.role = role
-          instance = capify.find_prototype_by_role(role)
+          instance = capify.prototype
+          role 'web'.to_sym, instance.public_ip_address
           role role.to_sym, instance.public_ip_address
         end
+      end
+    end
+    task :web do
+      capify.web_instances.each do |instance|
+        role :web, instance.public_ip_address
       end
     end
   end

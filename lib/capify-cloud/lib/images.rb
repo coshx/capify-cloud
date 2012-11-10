@@ -7,7 +7,7 @@ class Images
   end
 
   def create(prototype_instance)
-    puts "  creating new image - this could take a while"
+    puts "  creating new image - this could take a while" unless Fog.mocking?
     time =  Time.now.utc.iso8601.gsub(':','.')
     image_name = "#{@role}.#{@stage}"
     create_image_response = @compute_connection.create_image(prototype_instance.id, time, time)
@@ -59,14 +59,14 @@ class Images
     end
   end
 
-  private
-
   def cleanup_snapshots
     inactive_snapshots.each do |snap_id|
-      puts "deleting snapshot #{snap_id}"
+      puts "deleting snapshot #{snap_id} because created for ami which has already been deleted"
       @compute_connection.delete_snapshot(snap_id)
     end
   end
+
+  private
 
   def all_images
     @compute_connection.images.select {|image| !image.is_public}

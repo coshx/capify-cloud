@@ -13,6 +13,11 @@ class Instances
     stage_instances.select {|instance| instance.tags['Roles'].split(%r{,\s*}).include?(role.to_s) rescue false}.first
   end
 
+  def find_web_on_current_stage(stage)
+    stage_instances =  @connection.servers.select {|instance| instance.tags["Stage"] == stage}
+    stage_instances.select {|instance| instance.tags['Roles'].split(%r{,\s*}).include?('web') rescue false}
+  end
+
   def print_prototypes
     prototype_instances = @connection.servers.select {|instance| instance.tags["Options"] == 'prototype'}
     prototype_instances.each do |instance|

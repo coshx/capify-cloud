@@ -1,6 +1,6 @@
 class Autoscale
 
-  def initialize(connection,compute_connection, config_params, role, stage)
+  def initialize(connection, compute_connection, config_params, role, stage)
     @connection = connection
     @compute_connection = compute_connection
     @config_params = config_params
@@ -21,24 +21,23 @@ class Autoscale
 
   def update(image)
     launch_configuration_name = generate_launch_configuration_name(image)
-    puts "  creating new launch configuration #{launch_configuration_name}"
+    puts "  creating new launch configuration #{launch_configuration_name}" unless Fog.mocking?
     @connection.create_launch_configuration(image.id, instance_type, launch_configuration_name, launch_options)
     @connection.update_auto_scaling_group(autoscale_group_name,{"LaunchConfigurationName" => launch_configuration_name, "MinSize" => min_instances, "MaxSize" => max_instances})
     return {:group => @connection.groups.get(@autoscale_group_name), :configuration => @connection.configurations.get(launch_configuration_name)}
   end
 
   def cleanup
-    puts "  cleaning up"
     active_configurations = active_launch_configurations()
     all_launch_configurations.each do |configs|
       configs.select {|f| f["LaunchConfigurationName"] }.each do |key,launch_config_name|
         if !active_configurations.include? (launch_config_name)
           image_id = @connection.configurations.get(launch_config_name).image_id
           snapshot_id = snapshot_id_of_ami(image_id)
-          puts "  deleting #{launch_config_name}, #{image_id} and #{snapshot_id}"
-          @compute_connection.deregister_image(image_id)
-          @compute_connection.delete_snapshot(snapshot_id)
-          @connection.delete_launch_configuration(launch_config_name)
+          puts "  deleting #{launch_config_name}, #{image_id} and #{snapshot_id}" unless Fog.mocking?
+          begin @compute_connection.deregister_image(image_id)                ; rescue Fog::Compute::AWS::Error => e ; end
+          begin @compute_connection.delete_snapshot(snapshot_id)              ; rescue Exception => e ; end
+          begin @connection.delete_launch_configuration(launch_config_name)   ; rescue Fog::Compute::AWS::Error => e ; end
         end
       end
     end
@@ -60,7 +59,7 @@ class Autoscale
     all_launch_configurations.each do |config|
       launch_name = config['LaunchConfigurationName']
       image = @compute_connection.images.get(config['ImageId'])
-      puts "    #{launch_name} #{if active.include?(launch_name);'(active)' end} -> #{config['ImageId']} #{if image.nil?; ' (image unavailable)' else '(image available)'end}"
+      puts "    #{launch_name} #{if active.include?(launch_name);'(active)' end} -> #{config['ImageId']} #{if image.nil?; '(image unavailable)' else '(image available)'end}"
     end
   end
 
@@ -109,7 +108,7 @@ class Autoscale
 
   def snapshot_id_of_ami(image_id)
     ami = @compute_connection.images.get(image_id)
-    if !ami.nil?
+    unless ami.nil? || ami.block_device_mapping.first.nil?
       return ami.block_device_mapping.first['snapshotId']
     else
       return '- snapshot unavailable -'
