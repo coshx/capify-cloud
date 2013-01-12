@@ -1,7 +1,7 @@
 Capify Cloud
 ====================================================
 
-coshx/capify-cloud for automating autoscaled deployment on EC2
+coshx/capify-cloud for process using Capistrano (https://github.com/capistrano/capistrano) and Fog (https://github.com/fog/fog) for automating a large, autoscaled deployment of a rails app using amazon web services (http://aws.amazon.com/) cloud.
 
 
 ------------------------------
